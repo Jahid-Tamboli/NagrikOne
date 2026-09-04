@@ -1,0 +1,22 @@
+1:"$Sreact.fragment"
+2:I[8437,["437","static/chunks/437-0c67a5954f0b533c.js","407","static/chunks/app/payment/page-feb2c7da96626420.js"],"Image"]
+3:I[484,[],"OutletBoundary"]
+4:"$Sreact.suspense"
+8:I[484,[],"ViewportBoundary"]
+9:I[484,[],"MetadataBoundary"]
+b:I[7121,[],""]
+c:I[4581,[],""]
+:HL["/_next/static/css/cc34d84dca28ab4b.css","style"]
+7:X
+e:X
+e:C
+0:{"buildId":"yhcXvTpnT26ed9dPDmi1X","data":[{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"pay","children":["$","section",null,{"className":"paycard","children":[["$","div",null,{"className":"brand center","children":[["$","b",null,{"children":"N"}],["$","span",null,{"children":["NagrikOne",["$","small",null,{"children":"Secure Payment"}]]}]]}],["$","label",null,{"children":"UPI PAYMENT"}],["$","h1",null,{"children":"Pay for your NagrikOne service"}],["$","p",null,{"className":"muted","children":"Scan with any UPI app."}],["$","div",null,{"className":"qr","children":["$","$L2",null,{"src":"/nagrikone-upi-qr.jpg","alt":"NagrikOne UPI QR","width":482,"height":851}]}],["$","div",null,{"className":"upi","children":[["$","small",null,{"children":"UPI ID"}],["$","b",null,{"children":"8208583788@kotak811"}],["$","small",null,{"children":"Support: +91 8208583788"}]]}],["$","p",null,{"className":"notice","children":"Payment verification must be completed through a production payment gateway/webhook before a paid service is activated."}]]}]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":"$@6","staleTime":"$7","varyParams":null},{"rsc":["$","$1","h",{"children":[null,["$","$L8",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L9",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"NagrikOne — One Platform. Every Problem."}]]}]}]}],null]}],"isPartial":"$@a","staleTime":"$7","varyParams":null},{"rsc":["$","$1","c",{"children":[null,["$","$Lb",null,{"parallelRouterKey":"children","template":["$","$Lc",null,{}]}]]}],"isPartial":"$@d","staleTime":"$7","varyParams":"$e"},{"rsc":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/cc34d84dca28ab4b.css","precedence":"next"}]],["$","html",null,{"children":["$","body",null,{"children":["$","$Lb",null,{"parallelRouterKey":"children","template":["$","$Lc",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}]}]]}],"isPartial":"$@f","staleTime":"$7","varyParams":null}],"isUpgradeableISRFallback":false,"a":"$@10","rootVaryParams":null,"needsRuntimeRequest":"$@11"}
+5:null
+7:300
+11:true
+7:C
+10:0
+a:"$undefined"
+d:"$undefined"
+f:"$undefined"
+6:"$undefined"
