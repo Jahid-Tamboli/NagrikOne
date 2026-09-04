@@ -1,0 +1,1 @@
+import './globals.css';export const metadata={title:'NagrikOne — One Platform. Every Problem.'};export default function Layout({children}:{children:React.ReactNode}){return <html><body>{children}</body></html>}

@@ -1,0 +1,2 @@
+import {NextResponse} from 'next/server';import {db} from '../../../lib/db';
+export async function POST(req:Request){const b=await req.json();if(!b.caseId||!Number.isInteger(b.amount)||b.amount<1)return NextResponse.json({error:'caseId and valid amount required'},{status:400});const p=await db.payment.create({data:{caseId:b.caseId,amount:b.amount,status:'PENDING'}});return NextResponse.json({payment:p,upiId:process.env.NAGRIKONE_UPI_ID||'8208583788@kotak811',support:process.env.NAGRIKONE_SUPPORT||'+91 8208583788',verified:false});}

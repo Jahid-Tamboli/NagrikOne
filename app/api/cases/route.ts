@@ -1,0 +1,3 @@
+import {NextResponse} from 'next/server';import {db} from '../../../lib/db';
+export async function GET(){return NextResponse.json(await db.case.findMany({include:{events:true,payments:true},orderBy:{createdAt:'desc'}}))}
+export async function POST(req:Request){const b=await req.json();const c=await db.case.create({data:{title:String(b.title||'Citizen issue'),category:String(b.category||'General'),priority:String(b.priority||'MEDIUM'),status:'DRAFT',description:String(b.description||''),location:String(b.location||''),problemId:b.problemId||undefined}});await db.statusEvent.create({data:{caseId:c.id,status:'DRAFT',note:'Resolution draft created'}});return NextResponse.json(c,{status:201})}
