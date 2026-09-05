@@ -1,2 +1,0 @@
-import {NextResponse} from 'next/server';import {db} from './lib/db';import {detect} from './lib/detect';
-export async function POST(req:Request){try{const {text='',location=''}=await req.json();const id=detect(String(text));const p=await db.problemType.findUnique({where:{id}});if(!p)return NextResponse.json({error:'Problem not found'},{status:404});return NextResponse.json({problem:p,location,verified:false,submission:false})}catch{return NextResponse.json({error:'Invalid request'},{status:400})}}
