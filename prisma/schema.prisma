@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String?        @unique
+  phone         String?
+  createdAt     DateTime       @default(now())
+  cases         Case[]
+  conversations Conversation[]
+}
+
+model ProblemType {
+  id                      String   @id
+  name                    String
+  category                String
+  route                   String
+  priority                String
+  estimatedResolutionDays Int      @default(3)
+  legalAct                String?
+  escalationLevel         String?
+  tags                    String[]
+  questions               Json
+  evidence                Json
+  guidelines              String?
+  createdAt               DateTime @default(now())
+  cases                   Case[]
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String?
+  title     String?
+  category  String?
+  location  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User?     @relation(fields: [userId], references: [id])
+  messages  Message[]
+  cases     Case[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  structuredData Json?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Case {
+  id               String        @id @default(cuid())
+  title            String
+  category         String
+  priority         String
+  status           String        @default("DRAFT")
+  description      String?
+  location         String?
+  statutoryRoute   String?
+  suggestedUrgency String?
+  evidence         Json?
+  userId           String?
+  problemId        String?
+  conversationId   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  user             User?         @relation(fields: [userId], references: [id])
+  problem          ProblemType?  @relation(fields: [problemId], references: [id])
+  conversation     Conversation? @relation(fields: [conversationId], references: [id])
+  events           StatusEvent[]
+  payments         Payment[]
+}
+
+model StatusEvent {
+  id        String   @id @default(cuid())
+  caseId    String
+  status    String
+  note      String?
+  createdAt DateTime @default(now())
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  caseId      String?
+  amount      Int
+  planTier    String?  @default("STANDARD")
+  status      String   @default("PENDING")
+  providerRef String?
+  receiptData Json?
+  createdAt   DateTime @default(now())
+  case        Case?    @relation(fields: [caseId], references: [id])
+}
