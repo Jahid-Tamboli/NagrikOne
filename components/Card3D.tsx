@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useRef, useState } from 'react';
 
@@ -12,7 +12,7 @@ interface Card3DProps {
 export default function Card3D({
   children,
   className = '',
-  glowColor = 'rgba(52, 211, 153, 0.25)',
+  glowColor = 'rgba(52, 211, 153, 0.3)',
   onClick
 }: Card3DProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -29,9 +29,8 @@ export default function Card3D({
     const px = (x / rect.width) * 100;
     const py = (y / rect.height) * 100;
 
-    // Max 10 deg tilt
-    const ry = ((x / rect.width) - 0.5) * 18;
-    const rx = -((y / rect.height) - 0.5) * 18;
+    const ry = ((x / rect.width) - 0.5) * 14;
+    const rx = -((y / rect.height) - 0.5) * 14;
 
     setCoords({ rx, ry, px, py });
   };
@@ -44,7 +43,7 @@ export default function Card3D({
 
   return (
     <div
-      style={{ perspective: '1000px' }}
+      style={{ perspective: '1200px' }}
       className="inline-block w-full h-full"
     >
       <div
@@ -55,20 +54,22 @@ export default function Card3D({
         onMouseLeave={handleMouseLeave}
         style={{
           transform: isHovered
-            ? `rotateX(${coords.rx}deg) rotateY(${coords.ry}deg) translateZ(10px)`
-            : 'rotateX(0deg) rotateY(0deg) translateZ(0px)',
-          transition: isHovered ? 'transform 0.08s ease-out' : 'transform 0.5s ease-out'
+            ? `rotateX(${coords.rx}deg) rotateY(${coords.ry}deg) translateZ(12px) translateY(-4px)`
+            : 'rotateX(0deg) rotateY(0deg) translateZ(0px) translateY(0px)',
+          transition: isHovered ? 'transform 0.08s ease-out' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
-        className={`relative overflow-hidden rounded-2xl border border-slate-700/60 bg-slate-900/80 backdrop-blur-xl shadow-xl transition-shadow duration-300 ${
-          isHovered ? 'shadow-[0_15px_35px_rgba(0,0,0,0.5)] border-emerald-500/40' : ''
+        className={`relative overflow-hidden rounded-2xl border bg-gradient-to-b from-[#0b1b2d] via-[#081322] to-[#040a14] backdrop-blur-2xl shadow-xl transition-all duration-300 ${
+          isHovered
+            ? 'border-emerald-400/60 shadow-[0_20px_45px_rgba(0,0,0,0.6),0_0_35px_rgba(52,211,153,0.2)]'
+            : 'border-slate-800/80 shadow-[0_10px_30px_rgba(0,0,0,0.4)]'
         } ${className}`}
       >
-        {/* Dynamic Specular Light Glare following cursor */}
+        {/* Specular Glare */}
         {isHovered && (
           <div
             className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-200"
             style={{
-              background: `radial-gradient(circle at ${coords.px}% ${coords.py}%, ${glowColor} 0%, transparent 65%)`
+              background: `radial-gradient(circle at ${coords.px}% ${coords.py}%, ${glowColor} 0%, transparent 60%)`
             }}
           />
         )}
