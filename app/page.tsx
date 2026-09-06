@@ -1,911 +1,409 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
-  Camera,
-  CheckCircle2,
-  Clock3,
-  MapPin,
-  Mic,
-  MicOff,
-  Search,
   ShieldCheck,
-  UploadCloud,
-  AlertTriangle,
   Sparkles,
-  ExternalLink,
   ChevronRight,
-  FileText,
-  ShieldAlert,
   HelpCircle,
-  XCircle,
-  RefreshCw,
+  Clock,
+  Layers,
+  CheckCircle2,
+  FileCheck2,
+  Lock,
+  Activity,
   Zap,
   Scale,
-  Layers,
-  Check,
+  Building2,
+  MessageSquare,
   Eye,
-  Trash2,
-  FileCheck,
-  Navigation
+  ShieldAlert
 } from 'lucide-react';
-import Civic3DCanvas from '@/components/Civic3DCanvas';
-import Card3D from '@/components/Card3D';
 import Navbar from '@/components/Navbar';
-import AuthModal, { UserSession } from '@/components/AuthModal';
-import ProblemModal from '@/components/ProblemModal';
-import LegalNoticeModal from '@/components/LegalNoticeModal';
-import { PROBLEM_TYPES, ProblemTypeDefinition, CATEGORIES } from '@/lib/problemTypes';
+import AuthModal from '@/components/AuthModal';
+import NovaHeroCore from '@/components/three/NovaHeroCore';
+import ServiceCards3D from '@/components/three/ServiceCards3D';
+import { AuthSession } from '@/lib/auth/session';
 
-interface CaseItem {
-  id: string;
-  title: string;
-  category: string;
-  priority: string;
-  status: string;
-  description?: string;
-  location?: string;
-  createdAt: string;
-  events?: { id: string; status: string; note: string; createdAt: string }[];
-}
-
-interface DetectionResponse {
-  problem: ProblemTypeDefinition;
-  detection: {
-    confidence: number;
-    matchedKeywords: string[];
-    suggestedUrgency: string;
-  };
-  location: string;
-}
 export default function Home() {
-  const [text, setText] = useState('');
-  const [location, setLocation] = useState('');
-  const [result, setResult] = useState<DetectionResponse | null>(null);
-  const [cases, setCases] = useState<CaseItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [creatingCase, setCreatingCase] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [errorNotice, setErrorNotice] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
-
-  const [isRecording, setIsRecording] = useState(false);
-  const speechRecognitionRef = useRef<any>(null);
-
-  const [evidenceFiles, setEvidenceFiles] = useState<{ name: string; previewUrl?: string; ocrExtracted?: string }[]>([]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [confirmedQuestions, setConfirmedQuestions] = useState<Record<string, boolean>>({});
-
-  const [user, setUser] = useState<UserSession | null>(null);
+  const [user, setUser] = useState<AuthSession | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-
-  const [activeDossierProblem, setActiveDossierProblem] = useState<ProblemTypeDefinition | null>(null);
-  const [activeLegalNoticeProblem, setActiveLegalNoticeProblem] = useState<ProblemTypeDefinition | null>(null);
-
-  const resolutionCardRef = useRef<HTMLDivElement | null>(null);
-  const casesSectionRef = useRef<HTMLElement | null>(null);
+  const [quickInput, setQuickInput] = useState('');
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedUser = localStorage.getItem('nagrikone_user');
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    async function loadCases() {
+    async function checkUser() {
       try {
-        const res = await fetch('/api/cases');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            setCases(data);
-          }
+        const res = await fetch('/api/auth/session');
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
         }
-      } catch (err) {
-        console.warn('[NagrikOne] Could not fetch initial cases:', err);
-      }
+      } catch (e) {}
     }
-    loadCases();
+    checkUser();
   }, []);
 
-  const toggleVoiceInput = () => {
-    if (isRecording) {
-      if (speechRecognitionRef.current) {
-        speechRecognitionRef.current.stop();
-      }
-      setIsRecording(false);
-      return;
-    }
-
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'hi-IN';
-
-      recognition.onstart = () => {
-        setIsRecording(true);
-        setErrorNotice(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        if (transcript) {
-          setText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
-        setIsRecording(false);
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      speechRecognitionRef.current = recognition;
-      recognition.start();
-    } else {
-      setIsRecording(true);
-      setTimeout(() => {
-        if (!text) {
-          setText('Mere area mein street light 5 din se band hai aur raat ko andhera rehta hai.');
-        }
-        setIsRecording(false);
-      }, 2400);
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
-    const previewUrl = URL.createObjectURL(file);
-    const newEvidence = {
-      name: file.name,
-      previewUrl,
-      ocrExtracted: `OCR Verified: Geotag timestamped • Format ${file.type.split('/')[1] || 'DOC'}`
-    };
-
-    setEvidenceFiles((prev) => [...prev, newEvidence]);
-    setSuccessNotice(`Evidence "${file.name}" uploaded and AI OCR verified!`);
-  };
-
-  const handleDetectGPS = () => {
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation(`Ward 42, Metro Sector (Lat: ${pos.coords.latitude.toFixed(2)}, Lon: ${pos.coords.longitude.toFixed(2)})`);
-          setSuccessNotice('GPS Locality detected and pinned successfully!');
-        },
-        (err) => {
-          setLocation('Municipal Ward No. 14, Central Zone');
-          setSuccessNotice('Locality updated to Central Municipal Ward.');
-        }
-      );
-    } else {
-      setLocation('Municipal Ward No. 14, Central Zone');
-    }
-  };
-
-  async function handleSolve() {
-    if (!text.trim()) {
-      setErrorNotice('Please enter a description of your issue first.');
-      return;
-    }
-    setErrorNotice(null);
-    setLoading(true);
-
-    try {
-      const r = await fetch('/api/route', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          location: location || undefined
-        })
-      });
-
-      const data = await r.json();
-
-      if (!r.ok || !data.success) {
-        throw new Error(data.error || 'Failed to analyze issue.');
-      }
-
-      setResult(data);
-      setConfirmedQuestions({});
-
-      setTimeout(() => {
-        resolutionCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 150);
-    } catch (err: any) {
-      console.error('[NagrikOne] Solve error:', err);
-      setErrorNotice(err.message || 'Unable to analyze issue right now. Please check your network.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCreateCase() {
-    if (!result?.problem) return;
-    setCreatingCase(true);
-    setErrorNotice(null);
-
-    try {
-      const r = await fetch('/api/cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: result.problem.name,
-          category: result.problem.category,
-          priority: result.detection?.suggestedUrgency || result.problem.priority,
-          description: text,
-          location: location || result.location,
-          problemId: result.problem.id
-        })
-      });
-
-      const newCase = await r.json();
-
-      if (!r.ok || !newCase.id) {
-        throw new Error(newCase.error || 'Could not save case.');
-      }
-
-      setCases((prev) => [newCase, ...prev.filter((c) => c.id !== newCase.id)]);
-      setSuccessNotice(`Resolution draft "${newCase.id}" created successfully!`);
-
-      setTimeout(() => {
-        casesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 200);
-    } catch (err: any) {
-      console.error('[NagrikOne] Create case error:', err);
-      setErrorNotice(err.message || 'Error creating resolution case.');
-    } finally {
-      setCreatingCase(false);
-    }
-  }
-
-  function toggleQuestion(q: string) {
-    setConfirmedQuestions((prev) => ({
-      ...prev,
-      [q]: !prev[q]
-    }));
-  }
-
-  const filteredProblems = PROBLEM_TYPES.filter((p) => {
-    const matchesCat =
-      selectedCategory === 'All' ||
-      p.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-      selectedCategory.toLowerCase().includes(p.category.toLowerCase());
-
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.route.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.legalAct?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    return matchesCat && matchesSearch;
-  });
   return (
-    <main className="min-h-screen bg-[#040914] text-slate-100 selection:bg-emerald-500 selection:text-slate-950">
+    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
       <Navbar
-        casesCount={cases.length}
         user={user}
         onOpenAuth={() => setAuthModalOpen(true)}
-        onLogout={() => {
-          localStorage.removeItem('nagrikone_user');
+        onLogout={async () => {
+          await fetch('/api/auth/session', { method: 'DELETE' });
           setUser(null);
-          setSuccessNotice('Signed out successfully.');
         }}
       />
-
-      {errorNotice && (
-        <div className="container-box mt-4 animate-fadeIn">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-              <p className="text-sm font-medium">{errorNotice}</p>
-            </div>
-            <button onClick={() => setErrorNotice(null)} className="text-rose-400 hover:text-rose-200">
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {successNotice && (
-        <div className="container-box mt-4 animate-fadeIn">
-          <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              <p className="text-sm font-medium">{successNotice}</p>
-            </div>
-            <button onClick={() => setSuccessNotice(null)} className="text-emerald-400 hover:text-emerald-200">
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Hero Section */}
-      <section id="home" className="container-box hero-wrapper">
-        <div>
-          <div className="badge-verified">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>99 STATUTORY ROUTES • AI TRIAGE & LEGAL DISPATCH</span>
-          </div>
-
-          <h1 className="hero-heading">
-            Har problem ka <em>next step.</em>
-          </h1>
-
-          <p className="hero-subtext">
-            Government, municipal civic, cybercrime, bank fraud, women rights, consumer disputes, and utility breakdowns — tell NagrikOne what happened for instant official escalation routes.
-          </p>
-
-          {/* Smart Input Card */}
-          <div className="input-glass-box">
-            <textarea
-              className="issue-textarea"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Tell NagrikOne what happened... (e.g. 'Street light band hai 4 din se' or 'Cyber scam me OTP chala gaya')"
-            />
-
-            {/* Voice Waveform */}
-            {isRecording && (
-              <div className="flex items-center gap-2 p-2.5 mb-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs animate-pulse">
-                <div className="waveform-container">
-                  <div className="waveform-bar" />
-                  <div className="waveform-bar" />
-                  <div className="waveform-bar" />
-                  <div className="waveform-bar" />
-                  <div className="waveform-bar" />
-                </div>
-                <span>Listening live in Hindi / English... Speak your issue clearly</span>
-              </div>
-            )}
-
-            {/* Evidence Chips */}
-            {evidenceFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {evidenceFiles.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-mono"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="max-w-[140px] truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-rose-400 hover:text-rose-300"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="input-toolbar">
-              <div className="tool-group">
-                <button
-                  type="button"
-                  onClick={toggleVoiceInput}
-                  className={`btn-tool ${isRecording ? 'recording' : ''}`}
-                  title={isRecording ? 'Stop Voice Recording' : 'Dictate issue with Speech-to-Text'}
-                >
-                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="btn-tool"
-                  title="Upload Photo / Evidence with OCR Parsing"
-                >
-                  <Camera className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="btn-tool"
-                  title="Attach Bill, Police Slip, or Notice"
-                >
-                  <UploadCloud className="w-4 h-4" />
-                </button>
-
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
-                  <button
-                    type="button"
-                    onClick={handleDetectGPS}
-                    title="Auto-detect GPS location"
-                    className="text-cyan-400 hover:text-cyan-300"
-                  >
-                    <MapPin className="w-3.5 h-3.5" />
-                  </button>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="Locality / Ward (Optional)"
-                    className="bg-transparent border-none outline-none text-xs text-slate-200 placeholder:text-slate-500 w-36"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="btn-primary-action"
-                onClick={handleSolve}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
-                    <span>Analyzing Triage...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Start Resolution</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-            <span className="text-slate-500">Quick prompts:</span>
-            {[
-              'Street light band hai 4 din se',
-              'Online scam me 15,000 kat gaye',
-              'Pothole near metro station',
-              'E-commerce return refund stuck',
-              'Bank recovery agent harassment'
-            ].map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => setText(prompt)}
-                className="px-2.5 py-1 rounded-md bg-slate-900/60 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-emerald-300 transition-colors"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-4 text-xs font-mono text-slate-400">
-            <span className="flex items-center gap-1 text-emerald-400">✓ 99 Statutory Routes</span>
-            <span className="flex items-center gap-1 text-cyan-400">✓ NOVA.Ai Legal Drafting</span>
-            <span className="flex items-center gap-1 text-purple-400">✓ 100% Citizen Approval First</span>
-          </div>
-        </div>
-
-        <div className="w-full">
-          <Civic3DCanvas
-            onSelectCategory={(cat) => {
-              setSelectedCategory(cat);
-              const libraryElem = document.getElementById('library');
-              libraryElem?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          />
-        </div>
-      </section>
-      {/* Resolution Blueprint */}
-      {result?.problem && (
-        <section ref={resolutionCardRef} className="container-box animate-fadeIn">
-          <div className="plan-container">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <span className="section-label">RESOLUTION ACTION BLUEPRINT</span>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-xs font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-                  {Math.round((result.detection?.confidence || 0.88) * 100)}% Match Confidence
-                </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-mono font-bold ${
-                    result.detection?.suggestedUrgency === 'CRITICAL' || result.detection?.suggestedUrgency === 'URGENT'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  }`}
-                >
-                  {result.detection?.suggestedUrgency || result.problem.priority} PRIORITY
-                </span>
-              </div>
-            </div>
-
-            <h2 className="text-2xl md:text-3xl font-extrabold text-slate-50 tracking-tight">
-              {result.problem.name}
-            </h2>
-
-            <div className="my-4 p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-300 text-sm italic">
-              “{text}”
-            </div>
-
-            <div className="route-badge">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider text-emerald-300/80 block">
-                  Official Statutory Grievance Route
-                </span>
-                <strong className="text-base text-slate-100">{result.problem.route}</strong>
-              </div>
-            </div>
-
-            {result.problem.legalAct && (
-              <div className="mb-4 p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 flex items-center gap-2.5">
-                <Scale className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>
-                  <strong>Statutory Protection:</strong> {result.problem.legalAct}
-                </span>
-              </div>
-            )}
-
-            {result.problem.guidelines && (
-              <div className="mb-6 p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-200 leading-relaxed flex items-start gap-3">
-                <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="font-semibold block mb-0.5 text-cyan-100">Citizen Legal & Procedural Advisory:</strong>
-                  {result.problem.guidelines}
-                </div>
-              </div>
-            )}
-
-            <div className="mb-6">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 font-mono mb-3">
-                Smart Verification Checklist
-              </h3>
-              <div className="space-y-2">
-                {(Array.isArray(result.problem.questions) ? result.problem.questions : []).map(
-                  (q: string, idx: number) => {
-                    const isChecked = !!confirmedQuestions[q];
-                    return (
-                      <div
-                        key={q}
-                        onClick={() => toggleQuestion(q)}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-4 cursor-pointer transition-all ${
-                          isChecked
-                            ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
-                            : 'bg-slate-900/50 border-slate-800 hover:border-slate-700 text-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-mono text-emerald-400 font-bold">0{idx + 1}</span>
-                          <span className="text-sm">{q}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
-                            isChecked
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                              : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                          }`}
-                        >
-                          {isChecked ? 'Confirmed ✓' : 'Confirm'}
-                        </button>
-                      </div>
-                    );
-                  }
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                className="btn-primary-action w-full sm:w-auto justify-center"
-                onClick={handleCreateCase}
-                disabled={creatingCase}
-              >
-                {creatingCase ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-900" />
-                    <span>Saving Resolution Case...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create Resolution Draft</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveLegalNoticeProblem(result.problem)}
-                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-purple-500/40 bg-purple-950/40 text-purple-300 font-semibold text-xs hover:bg-purple-900/40 flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-              >
-                <Sparkles className="w-4 h-4 text-purple-400" />
-                <span>Generate NOVA AI Legal Draft</span>
-              </button>
-
-              <Link
-                href="/payment"
-                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold text-xs hover:bg-emerald-500/20 text-center transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span>Fast-Track Pass</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Cases Section */}
-      <section ref={casesSectionRef} id="cases" className="container-box py-16">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <span className="section-label">MY RESOLUTION CENTER</span>
-            <h2 className="text-3xl font-extrabold tracking-tight mt-1 text-slate-100">
-              Cases that move forward.
-            </h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-mono text-slate-400">Total Cases: {cases.length}</span>
-            <button
-              type="button"
-              onClick={async () => {
-                const res = await fetch('/api/cases');
-                if (res.ok) setCases(await res.json());
-              }}
-              className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:text-emerald-400 flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh</span>
-            </button>
-          </div>
-        </div>
-
-        {cases.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl border border-slate-800 bg-slate-900/40">
-            <Clock3 className="w-8 h-8 text-slate-500 mx-auto mb-3" />
-            <p className="text-sm text-slate-400">Your newly created resolution cases will appear here.</p>
-            <p className="text-xs text-slate-600 mt-1">
-              Start by typing an issue in the input box above to generate your first draft.
-            </p>
-          </div>
-        ) : (
-          <div className="grid-cases">
-            {cases.map((c) => (
-              <Card3D key={c.id} glowColor="rgba(6, 182, 212, 0.2)">
-                <div className="case-card-inner">
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/20">
-                        {c.category}
-                      </span>
-                      <span className={`status-pill status-${c.status || 'DRAFT'}`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                        {c.status || 'DRAFT'}
-                      </span>
-                    </div>
-
-                    <h3 className="text-base font-bold text-slate-100 mb-2 leading-snug">
-                      {c.title}
-                    </h3>
-
-                    {c.description && (
-                      <p className="text-xs text-slate-400 line-clamp-2 mb-4">
-                        {c.description}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <span>ID: {c.id.substring(0, 14)}</span>
-                    <Link
-                      href={`/payment?caseId=${c.id}`}
-                      className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
-                    >
-                      <span>Verify & Pay</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
-                  </div>
-                </div>
-              </Card3D>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* 99 Problem Library */}
-      <section id="library" className="container-box py-16 border-t border-slate-800/60">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="section-label">NOVA KNOWLEDGE LAYER</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                99 Active Routes
-              </span>
-            </div>
-            <h2 className="text-3xl font-extrabold tracking-tight mt-1 text-slate-100">
-              99 Problem Library & Statutory Routes
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-400 shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search all 99 problems, acts, or tags..."
-              className="bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-500 w-full"
-            />
-          </div>
-        </div>
-
-        <div className="filter-bar">
-          {CATEGORIES.map((cat) => {
-            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`filter-btn ${isSelected ? 'active' : ''}`}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-slate-400 font-mono mb-4">
-          <span>Showing {filteredProblems.length} statutory routes</span>
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="text-cyan-400 hover:underline"
-            >
-              Clear Search
-            </button>
-          )}
-        </div>
-
-        <div className="grid-cases">
-          {filteredProblems.map((p) => (
-            <Card3D key={p.id} glowColor="rgba(52, 211, 153, 0.2)">
-              <div className="case-card-inner">
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20">
-                      {p.category}
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400">
-                      ~{p.estimatedResolutionDays} Days
-                    </span>
-                  </div>
-
-                  <h3 className="text-base font-bold text-slate-100 mb-1.5">{p.name}</h3>
-
-                  <p className="text-xs text-slate-400 mb-2 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                    <span className="truncate">{p.route}</span>
-                  </p>
-
-                  {p.legalAct && (
-                    <p className="text-[11px] text-slate-500 font-mono line-clamp-1 mb-3">
-                      ⚖️ {p.legalAct}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                  <button
-                    type="button"
-                    onClick={() => setActiveDossierProblem(p)}
-                    className="w-full py-2 px-3 rounded-lg border border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-between transition-colors"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>View Statutory Route Dossier</span>
-                    </span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setText(p.tags[0] ? `Issue regarding: ${p.name}` : p.name);
-                      const homeElem = document.getElementById('home');
-                      homeElem?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="w-full py-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-xs font-bold text-emerald-300 flex items-center justify-between transition-colors"
-                  >
-                    <span>Launch Direct Workflow</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </Card3D>
-          ))}
-        </div>
-      </section>
-
-      {/* Modern Footer */}
-      <footer className="border-t border-slate-800/80 py-12 bg-[#030710]">
-        <div className="container-box flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-slate-500 font-mono">
-          <div className="space-y-1 text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <span className="font-bold text-slate-200 text-sm">NagrikOne</span>
-              <span>•</span>
-              <span className="text-emerald-400">One Citizen. One Platform. Every Problem.</span>
-            </div>
-            <p className="text-[11px] text-slate-600">
-              Covers 99 Statutory Citizen Grievances under BNSS, Consumer Protection Act, IT Act, and RTI Directives.
-            </p>
-          </div>
-          <div className="text-center md:text-right">
-            <span className="block text-slate-400 font-semibold">Platform Architect: Jahid Tamboli</span>
-            <span className="text-[10px] text-slate-600">3D Cyber-Civic Edition • 256-Bit SSL Encrypted</span>
-          </div>
-        </div>
-      </footer>
 
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        onLoginSuccess={(loggedInUser) => {
-          setUser(loggedInUser);
-          setSuccessNotice(`Welcome back, ${loggedInUser.name}!`);
-        }}
+        onLoginSuccess={(u) => setUser(u)}
       />
 
-      <ProblemModal
-        problem={activeDossierProblem}
-        onClose={() => setActiveDossierProblem(null)}
-        onSelectWorkflow={(p) => {
-          setText(p.name);
-          const homeElem = document.getElementById('home');
-          homeElem?.scrollIntoView({ behavior: 'smooth' });
-        }}
-        onOpenLegalNotice={(p) => {
-          setActiveLegalNoticeProblem(p);
-        }}
-      />
+      {/* ============================================================ */}
+      {/* SECTION 1: HERO SECTION (Aevon Style Composition)            */}
+      {/* ============================================================ */}
+      <section className="container-box py-12 lg:py-20">
+        <div className="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
+          {/* Left Column: Headline, Subtext, CTAs */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <span>NAGRIKONE • CITIZEN INTELLIGENCE PLATFORM</span>
+            </div>
 
-      <LegalNoticeModal
-        isOpen={!!activeLegalNoticeProblem}
-        onClose={() => setActiveLegalNoticeProblem(null)}
-        problem={activeLegalNoticeProblem}
-        citizenName={user?.name || 'Citizen of India'}
-        locality={location || 'Local Municipal Ward / Jurisdiction'}
-        customDetails={text || activeLegalNoticeProblem?.name}
-      />
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-50 tracking-tight leading-[1.05]">
+              One place for every citizen problem.
+            </h1>
+
+            <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-xl font-sans">
+              Tell NOVA what you're facing. NOVA understands the problem, guides you through the next steps, helps organize the case, and lets you track what happens next.
+            </p>
+
+            {/* Quick Interactive Start Box */}
+            <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-b from-[#081322] to-[#040914] border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] flex flex-col sm:flex-row items-center gap-3">
+              <input
+                type="text"
+                value={quickInput}
+                onChange={(e) => setQuickInput(e.target.value)}
+                placeholder="What problem are you facing? (e.g. UPI failed, street light broken...)"
+                className="w-full bg-transparent border-none outline-none text-xs sm:text-sm text-slate-100 placeholder:text-slate-600 px-3 py-2 font-sans"
+              />
+
+              <Link
+                href={`/nova${quickInput ? `?initial=${encodeURIComponent(quickInput)}` : ''}`}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.4)] whitespace-nowrap transition-all"
+              >
+                <span>Talk to NOVA</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            {/* CTAs & Trust Points */}
+            <div className="flex flex-wrap items-center gap-4 pt-2">
+              <Link
+                href="/how-it-works"
+                className="px-5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 hover:border-slate-600 text-slate-300 font-semibold text-xs transition-colors flex items-center gap-1.5"
+              >
+                <span>How NagrikOne Works</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+
+              <div className="flex items-center gap-4 text-xs font-mono text-slate-500">
+                <span className="flex items-center gap-1 text-cyan-400">✓ Real Statutory Routes</span>
+                <span className="flex items-center gap-1 text-purple-400">✓ No Fake Claims</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: 3D NOVA Intelligence Object */}
+          <div className="lg:col-span-5">
+            <div className="p-2 rounded-3xl bg-gradient-to-b from-[#081322]/80 to-[#020408]/90 border border-cyan-500/20 shadow-2xl">
+              <NovaHeroCore state="IDLE" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 2: PROBLEM STATEMENT — CITIZEN FRAGMENTATION         */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="max-w-3xl mb-12">
+          <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold block mb-2">
+            THE FRAGMENTATION PROBLEM
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight leading-tight">
+            Citizen problems are scattered across departments, portals, service providers and processes.
+          </h2>
+          <p className="text-sm sm:text-base text-slate-400 mt-4 leading-relaxed font-sans">
+            When a pothole damages your vehicle, a bank deducts UPI money twice, or an e-commerce firm denies a valid return, finding the right authority or regulatory helpline is exhausting. Most citizens abandon legitimate grievances because the system is fragmented.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold">
+              01
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">Confusing Jurisdictions</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans">
+              Is a street issue under PWD, Municipal Corporation, or Ward Discom? Citizens shouldn't need a law degree to report a broken light.
+            </p>
+          </div>
+
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+              02
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">Zero Transparency & SLA</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans">
+              Complaints vanish into black-box portals without clear turnaround times, escalation criteria, or accountability.
+            </p>
+          </div>
+
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+              03
+            </div>
+            <h3 className="text-lg font-bold text-slate-100">Unstructured Evidence</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans">
+              Without geotagged photos, transaction RRNs, or statutory act citations, valid complaints are routinely dismissed.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 3: NOVA CITIZEN INTELLIGENCE LAYER                   */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#08182a] to-[#040c17] border border-cyan-500/30">
+          <div className="max-w-2xl mb-8">
+            <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold block mb-2">
+              THE INTELLIGENCE LAYER
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
+              NOVA is not merely a chatbot.
+            </h2>
+            <p className="text-sm text-slate-300 mt-2">
+              NOVA orchestrates understanding, evidence compilation, and statutory workflows into a unified engine.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+              <strong className="text-base text-cyan-300 font-bold block">CITIZEN INTELLIGENCE</strong>
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                Understands natural speech and text across languages, extracting critical facts without forcing rigid forms.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+              <strong className="text-base text-purple-300 font-bold block">CASE INTELLIGENCE</strong>
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                Organizes facts, geotagged evidence, and applicable statutory laws into a formal case dossier.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
+              <strong className="text-base text-emerald-300 font-bold block">WORKFLOW INTELLIGENCE</strong>
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                Monitors statutory turnaround times (SLA), triggers escalation alerts, and verifies resolution before closure.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 4: WHAT NAGRIKONE CAN HELP WITH (3D Cards)          */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="max-w-3xl mb-12">
+          <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold block mb-2">
+            SCOPE OF SUPPORT
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
+            What NagrikOne can help you with
+          </h2>
+          <p className="text-sm sm:text-base text-slate-400 mt-3 leading-relaxed font-sans">
+            From civic issues to digital payments, documents and everyday service problems, NOVA helps you understand what to do next.
+          </p>
+        </div>
+
+        <ServiceCards3D />
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 5: HOW NOVA WORKS                                    */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold block mb-2">
+            RESOLUTION METHODOLOGY
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
+            How NOVA Works
+          </h2>
+          <p className="text-sm text-slate-400 mt-2 font-sans">
+            A continuous sequence from explanation to verified resolution.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+          {[
+            { step: '01', title: 'Problem', desc: 'You explain in plain words' },
+            { step: '02', title: 'Understand', desc: 'NOVA evaluates domain & urgency' },
+            { step: '03', title: 'Ask', desc: 'Contextual follow-up questions' },
+            { step: '04', title: 'Verify', desc: 'Evidence & location confirmed' },
+            { step: '05', title: 'Route', desc: 'Target jurisdiction identified' },
+            { step: '06', title: 'Track', desc: 'SLA monitored until resolution' }
+          ].map((item) => (
+            <div key={item.step} className="p-4 rounded-2xl bg-[#081322] border border-slate-800">
+              <span className="text-xs font-mono font-bold text-cyan-400 block mb-1">STEP {item.step}</span>
+              <strong className="text-sm font-bold text-slate-100 block mb-1">{item.title}</strong>
+              <p className="text-[11px] text-slate-400 font-sans">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 6 & 7: CASE LIFECYCLE & WORKFLOW INTELLIGENCE       */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="grid lg:grid-cols-2 gap-8 items-center">
+          <div className="space-y-4">
+            <span className="text-[10.5px] font-mono uppercase tracking-widest text-purple-400 font-bold block">
+              DETERMINISTIC STATE MACHINE
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
+              Case Lifecycle & SLA Timers
+            </h2>
+            <p className="text-sm text-slate-400 leading-relaxed font-sans">
+              Every case created in NagrikOne progresses through deterministic statutory states. When an SLA deadline approaches, warning flags alert the citizen and recommend higher escalations.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300">Intake & Verification</span>
+                <span className="text-cyan-400 font-bold">VERIFIED</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300">Statutory Preparation</span>
+                <span className="text-emerald-400 font-bold">READY_FOR_PWD_SUBMISSION</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300">SLA Warning at 75% Time</span>
+                <span className="text-amber-400 font-bold">SLA_WARNING</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300">Citizen Verified Closure</span>
+                <span className="text-purple-400 font-bold">STATUTORY_RESOLVED</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8 rounded-3xl bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-xs font-mono font-bold text-slate-300">SAMPLE LIVE DOSSIER</span>
+              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-500/30">N1-2026-89412</span>
+            </div>
+            <h3 className="text-base font-bold text-slate-100">Non-Functional Street Light / Dark Public Spot</h3>
+            <p className="text-xs text-slate-400 font-mono">Route: Municipal Electrical Department / Discom Ward Office</p>
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
+              ✓ Geotagged photo verified • Pole ID #42 logged • SLA Target: 48h
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 8: CASE TRACKING PREVIEW                             */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#081322] to-[#030712] border border-cyan-500/30 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="space-y-3 max-w-xl">
+            <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold block">
+              REAL CITIZEN TRACKING
+            </span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-50">
+              Track real database events. No fake timelines.
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans">
+              Inspect your case history, review official act citations, check officer compliance remarks, and confirm resolution from your private citizen dashboard.
+            </p>
+          </div>
+
+          <Link
+            href="/cases"
+            className="px-6 py-3.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200 hover:text-cyan-300 font-bold text-xs flex items-center gap-2 transition-colors whitespace-nowrap"
+          >
+            <span>Open Case Dockets</span>
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 9: TRUST & TRANSPARENCY PRINCIPLES                  */}
+      {/* ============================================================ */}
+      <section className="container-box py-16 border-t border-slate-800/80">
+        <div className="max-w-3xl mx-auto text-center space-y-4 mb-12">
+          <span className="text-[10.5px] font-mono uppercase tracking-widest text-emerald-400 font-bold block">
+            ETHICS & TRANSPARENCY
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-50">
+            Trust is our core architecture.
+          </h2>
+          <p className="text-sm text-slate-400 font-sans leading-relaxed">
+            NagrikOne is an independent citizen-support platform. We never pretend to be a government body, make false guarantees, or simulate fake submissions.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-5 rounded-2xl bg-[#081322] border border-slate-800 space-y-2">
+            <strong className="text-sm font-bold text-slate-200 block">No Fake Government Claims</strong>
+            <p className="text-xs text-slate-400">We never pretend official affiliation or fabricate government outcomes.</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-[#081322] border border-slate-800 space-y-2">
+            <strong className="text-sm font-bold text-slate-200 block">Server-Side Security</strong>
+            <p className="text-xs text-slate-400">All authentication, payments, and RBAC authorization are strictly verified server-side.</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-[#081322] border border-slate-800 space-y-2">
+            <strong className="text-sm font-bold text-slate-200 block">Transparent Statuses</strong>
+            <p className="text-xs text-slate-400">Every status reflects real database events and verified external actions.</p>
+          </div>
+          <div className="p-5 rounded-2xl bg-[#081322] border border-slate-800 space-y-2">
+            <strong className="text-sm font-bold text-slate-200 block">Citizen Controlled</strong>
+            <p className="text-xs text-slate-400">You control your evidence and confirm resolution before cases are closed.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* SECTION 10: FINAL ACTION CTA                                */}
+      {/* ============================================================ */}
+      <section className="container-box py-20 border-t border-slate-800/80">
+        <div className="p-10 sm:p-16 rounded-3xl bg-gradient-to-r from-[#081b2e] via-[#041220] to-[#020810] border border-cyan-500/40 text-center max-w-4xl mx-auto shadow-[0_0_60px_rgba(6,182,212,0.2)]">
+          <h2 className="text-3xl sm:text-5xl font-black text-slate-50 tracking-tight mb-4">
+            Tell NOVA what's wrong.
+          </h2>
+          <p className="text-sm sm:text-base text-slate-400 max-w-lg mx-auto mb-8 font-sans">
+            Get instant statutory guidance, organize your evidence, and generate an official resolution dossier in minutes.
+          </p>
+          <Link
+            href="/nova"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-sm shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-all"
+          >
+            <span>Talk to NOVA</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </section>
     </main>
   );
 }

@@ -10,23 +10,52 @@ declare global {
   var __fallbackPaymentsStore: any[] | undefined;
 }
 
-// In-memory fallback stores for demo, preview, and zero-DB deployments
+// In-memory fallback stores for development or initial preview
 if (!global.__fallbackCasesStore) {
   global.__fallbackCasesStore = [
     {
       id: 'case_demo_101',
-      title: 'Road Pothole / Damaged Road',
-      category: 'Civic',
+      caseNumber: 'N1-2026-00101',
+      title: 'Road Potholes & Severely Damaged Streets',
+      category: 'Civic & Municipal',
       priority: 'HIGH',
       status: 'VERIFIED',
-      description: 'Dangerous pothole near Shivaji Nagar metro station pillar 42.',
-      location: 'Shivaji Nagar, Pune',
+      description: 'Dangerous pothole near Shivaji Nagar metro station pillar 42 causing two-wheeler skids.',
+      location: 'Shivaji Nagar, Ward 42, Pune',
       problemId: 'civic-pothole',
+      isUnknownIssue: false,
       createdAt: new Date(Date.now() - 86400000).toISOString(),
       updatedAt: new Date(Date.now() - 43200000).toISOString(),
       events: [
-        { id: 'ev_1', caseId: 'case_demo_101', status: 'DRAFT', note: 'Resolution draft created', createdAt: new Date(Date.now() - 86400000).toISOString() },
-        { id: 'ev_2', caseId: 'case_demo_101', status: 'VERIFIED', note: 'Evidence verified by citizen', createdAt: new Date(Date.now() - 43200000).toISOString() }
+        {
+          id: 'ev_1',
+          caseId: 'case_demo_101',
+          status: 'DRAFT',
+          actorType: 'CITIZEN',
+          note: 'Citizen initiated complaint draft with photo evidence',
+          createdAt: new Date(Date.now() - 86400000).toISOString()
+        },
+        {
+          id: 'ev_2',
+          caseId: 'case_demo_101',
+          status: 'VERIFIED',
+          actorType: 'NOVA_AI',
+          note: 'NOVA verified geotag and prepared Municipal PWD routing dossier',
+          createdAt: new Date(Date.now() - 43200000).toISOString()
+        }
+      ],
+      evidenceList: [
+        {
+          id: 'evi_1',
+          caseId: 'case_demo_101',
+          fileName: 'pothole_pillar42.jpg',
+          fileUrl: '/pothole_sample.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1048576,
+          ocrExtracted: 'Geotag Ward 42 Pune • Timestamp 2026-09-05',
+          verified: true,
+          createdAt: new Date(Date.now() - 86400000).toISOString()
+        }
       ],
       payments: []
     }
@@ -48,21 +77,19 @@ try {
     }
     prismaClient = global.__prismaClientInstance;
   } else {
-    // DATABASE_URL is either missing or non-postgres (e.g. SQLite dev.db in .env.example)
-    // We instantiate lazily if valid, else use fallback
     if (!global.__prismaClientInstance) {
       global.__prismaClientInstance = new PrismaClient();
     }
     prismaClient = global.__prismaClientInstance;
   }
 } catch (e) {
-  console.warn('[NagrikOne DB] PrismaClient initialization deferred; fallback mode enabled:', e);
+  console.warn('[NagrikOne DB] PrismaClient instantiation note:', e);
   prismaClient = null;
 }
 
 export const db = prismaClient || (new PrismaClient() as any);
 export const fallbackStore = {
-  cases: global.__fallbackCasesStore,
-  payments: global.__fallbackPaymentsStore,
+  cases: global.__fallbackCasesStore as any[],
+  payments: global.__fallbackPaymentsStore as any[],
   problems: PROBLEM_TYPES
 };

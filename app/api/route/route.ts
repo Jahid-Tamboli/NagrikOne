@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { detectProblem } from '@/lib/detect';
-import { getProblemById } from '@/lib/problemTypes';
+import { classifyCitizenIssue } from '@/lib/nova/classifier';
+import { getDynamicQuestions } from '@/lib/nova/question-engine';
+import { evaluateCaseSla } from '@/lib/workflow/sla';
 
 export async function POST(req: Request) {
   try {
@@ -16,60 +17,39 @@ export async function POST(req: Request) {
       );
     }
 
-    const detection = detectProblem(text);
-    let problemData: any = null;
+    // 1. Natural Language Classification
+    const classification = classifyCitizenIssue(text, customLocation);
 
-    // Try database lookup first if available
-    try {
-      if (db?.problemType?.findUnique) {
-        problemData = await db.problemType.findUnique({
-          where: { id: detection.problemId }
-        });
-      }
-    } catch (dbError) {
-      console.warn('[API /route] Database lookup bypassed, using canonical catalog:', dbError);
-    }
+    // 2. Dynamic Questions Sequence
+    const dynamicQuestions = getDynamicQuestions(classification.problemId, text);
 
-    // Fall back to canonical memory catalog if database has not been seeded
-    if (!problemData) {
-      problemData = getProblemById(detection.problemId) || detection.problem;
-    }
+    // 3. Calculated SLA Metrics
+    const slaAssessment = evaluateCaseSla(new Date(), classification.suggestedUrgency, classification.problem.category, 'DRAFT');
 
-    // Ensure questions and evidence are arrays even if stored as JSON string
-    const questions = Array.isArray(problemData.questions)
-      ? problemData.questions
-      : typeof problemData.questions === 'string'
-      ? JSON.parse(problemData.questions)
-      : detection.problem.questions;
-
-    const evidence = Array.isArray(problemData.evidence)
-      ? problemData.evidence
-      : typeof problemData.evidence === 'string'
-      ? JSON.parse(problemData.evidence)
-      : detection.problem.evidence;
-
-    const resolvedLocation = customLocation || detection.extractedLocation || 'Location required from citizen';
+    const resolvedLocation = customLocation || classification.extractedLocation || 'Location details required';
 
     return NextResponse.json({
       success: true,
-      problem: {
-        ...problemData,
-        questions,
-        evidence
+      problem: classification.problem,
+      classification: {
+        confidence: classification.confidence,
+        matchedKeywords: classification.matchedKeywords,
+        suggestedUrgency: classification.suggestedUrgency,
+        isUnknown: classification.isUnknown,
+        inferredDomain: classification.inferredDomain,
+        reasoning: classification.reasoning
       },
-      detection: {
-        confidence: detection.confidence,
-        matchedKeywords: detection.matchedKeywords,
-        suggestedUrgency: detection.suggestedUrgency
-      },
+      dynamicQuestions,
+      sla: slaAssessment,
       location: resolvedLocation,
+      guidelines: classification.problem.guidelines,
       verified: false,
-      submission: false
+      readyForRouting: true
     });
   } catch (err: any) {
-    console.error('[API /route] Error handling request:', err);
+    console.error('[API /route] Error handling natural language triage:', err);
     return NextResponse.json(
-      { error: 'An error occurred while analyzing the complaint. Please try again.' },
+      { error: 'An error occurred while analyzing the issue. Please try again.' },
       { status: 500 }
     );
   }

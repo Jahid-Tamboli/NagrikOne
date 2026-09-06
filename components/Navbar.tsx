@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -6,26 +6,27 @@ import {
   Zap,
   User,
   LogOut,
-  ShieldCheck,
   Menu,
   X,
   FileText,
-  Lock,
-  Layers,
-  Sparkles
+  Sparkles,
+  HelpCircle,
+  Info,
+  Phone,
+  ChevronRight
 } from 'lucide-react';
-import { UserSession } from './AuthModal';
+import { AuthSession } from '@/lib/auth/session';
 
 interface NavbarProps {
-  casesCount: number;
-  user: UserSession | null;
+  casesCount?: number;
+  user?: AuthSession | null;
   onOpenAuth: () => void;
   onLogout: () => void;
 }
 
 export default function Navbar({
-  casesCount,
-  user,
+  casesCount = 0,
+  user = null,
   onOpenAuth,
   onLogout
 }: NavbarProps) {
@@ -39,33 +40,49 @@ export default function Navbar({
         <div className="brand-icon">N1</div>
         <div className="brand-title">
           <span className="font-extrabold tracking-tight text-slate-50 text-lg">NagrikOne</span>
-          <span className="brand-badge">CITIZEN RESOLUTION PLATFORM</span>
+          <span className="brand-badge">CITIZEN INTELLIGENCE PLATFORM</span>
         </div>
       </Link>
 
-      {/* Desktop Navigation */}
+      {/* Desktop Minimal Navigation (NO Admin links) */}
       <nav className="hidden lg:flex items-center gap-6">
-        <Link href="/#home" className="nav-item">
-          Home
+        <Link href="/nova" className="nav-item flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300">
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>NOVA</span>
         </Link>
-        <Link href="/#library" className="nav-item flex items-center gap-1.5">
-          <Layers className="w-3.5 h-3.5 text-cyan-400" />
-          <span>99 Problem Library</span>
+        <Link href="/how-it-works" className="nav-item flex items-center gap-1.5">
+          <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
+          <span>How It Works</span>
         </Link>
-        <Link href="/#cases" className="nav-item flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5 text-emerald-400" />
-          <span>My Cases</span>
-          <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
-            {casesCount}
-          </span>
+        <Link href="/about" className="nav-item flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5 text-slate-400" />
+          <span>About</span>
         </Link>
-        <Link href="/admin" className="nav-item flex items-center gap-1.5 text-slate-400 hover:text-purple-300">
-          <Lock className="w-3.5 h-3.5 text-purple-400" />
-          <span>Admin Portal</span>
+        <Link href="/contact" className="nav-item flex items-center gap-1.5">
+          <Phone className="w-3.5 h-3.5 text-slate-400" />
+          <span>Contact</span>
         </Link>
-        <Link href="/payment" className="btn-pay-nav">
-          <Zap className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Resolution Pass & Pay</span>
+
+        {/* Authenticated Citizen Cases Link */}
+        {user && (
+          <Link href="/cases" className="nav-item flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-emerald-400" />
+            <span>My Cases</span>
+            {casesCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                {casesCount}
+              </span>
+            )}
+          </Link>
+        )}
+
+        {/* Primary CTA */}
+        <Link
+          href="/nova"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all"
+        >
+          <span>Talk to NOVA</span>
+          <ChevronRight className="w-3.5 h-3.5" />
         </Link>
 
         {/* User Profile / Login */}
@@ -73,34 +90,34 @@ export default function Navbar({
           <div className="relative">
             <button
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-emerald-500/40 text-xs text-slate-200 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-500/40 text-xs text-slate-200 transition-colors"
             >
-              <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs font-mono">
+              <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-xs font-mono">
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <span className="max-w-[100px] truncate font-medium">{user.name}</span>
+              <span className="max-w-[110px] truncate font-medium">{user.name}</span>
             </button>
 
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#081322] border border-slate-700 p-2 shadow-2xl text-xs text-slate-200 z-50 animate-fadeIn">
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#081322] border border-slate-700 p-2 shadow-2xl text-xs text-slate-200 z-50 animate-fadeIn">
                 <div className="p-2 border-b border-slate-800">
                   <p className="font-bold text-slate-100">{user.name}</p>
-                  <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
-                  <p className="text-[10px] text-emerald-400 font-mono mt-0.5">+91 {user.mobile}</p>
+                  {user.email && <p className="text-[11px] text-slate-400 truncate">{user.email}</p>}
+                  {user.phone && <p className="text-[10px] text-cyan-400 font-mono mt-0.5">+91 {user.phone}</p>}
                 </div>
                 <Link
-                  href="/#cases"
+                  href="/cases"
                   onClick={() => setUserDropdownOpen(false)}
                   className="block p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-slate-100 mt-1"
                 >
-                  My Resolution Cases ({casesCount})
+                  My Resolution Cases
                 </Link>
                 <Link
                   href="/payment"
                   onClick={() => setUserDropdownOpen(false)}
                   className="block p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-slate-100"
                 >
-                  Active Passes & Receipts
+                  Resolution Passes & Receipts
                 </Link>
                 <button
                   onClick={() => {
@@ -118,7 +135,7 @@ export default function Navbar({
         ) : (
           <button
             onClick={onOpenAuth}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-700 hover:border-emerald-500/40 bg-slate-900/80 text-xs font-semibold text-slate-200 hover:text-emerald-300 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-700 hover:border-cyan-500/40 bg-slate-900/80 text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-colors"
           >
             <User className="w-3.5 h-3.5" />
             <span>Citizen Sign In</span>
@@ -134,64 +151,65 @@ export default function Navbar({
         {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Drawer (NO Admin links) */}
       {mobileMenuOpen && (
-        <div className="lg:hidden absolute top-[74px] left-0 right-0 bg-[#081322]/95 border-b border-slate-800 backdrop-blur-2xl p-6 flex flex-col gap-4 text-sm text-slate-200 z-50 animate-fadeIn">
+        <div className="lg:hidden absolute top-[76px] left-0 right-0 bg-[#081322]/95 border-b border-slate-800 backdrop-blur-2xl p-6 flex flex-col gap-4 text-sm text-slate-200 z-50 animate-fadeIn">
           <Link
-            href="/#home"
+            href="/nova"
+            onClick={() => setMobileMenuOpen(false)}
+            className="py-2 border-b border-slate-800/60 flex items-center justify-between text-cyan-300 font-semibold"
+          >
+            <span>NOVA Intelligence</span>
+            <Sparkles className="w-4 h-4" />
+          </Link>
+          <Link
+            href="/how-it-works"
             onClick={() => setMobileMenuOpen(false)}
             className="py-2 border-b border-slate-800/60"
           >
-            Home
+            How It Works
           </Link>
           <Link
-            href="/#library"
+            href="/about"
             onClick={() => setMobileMenuOpen(false)}
-            className="py-2 border-b border-slate-800/60 flex items-center justify-between"
+            className="py-2 border-b border-slate-800/60"
           >
-            <span>99 Problem Library</span>
-            <span className="text-xs text-cyan-400 font-mono">99 Routes</span>
+            About NagrikOne
           </Link>
           <Link
-            href="/#cases"
+            href="/contact"
             onClick={() => setMobileMenuOpen(false)}
-            className="py-2 border-b border-slate-800/60 flex items-center justify-between"
+            className="py-2 border-b border-slate-800/60"
           >
-            <span>My Cases</span>
-            <span className="text-xs text-emerald-400 font-mono">{casesCount}</span>
-          </Link>
-          <Link
-            href="/admin"
-            onClick={() => setMobileMenuOpen(false)}
-            className="py-2 border-b border-slate-800/60 text-purple-300"
-          >
-            Admin Command Center
-          </Link>
-          <Link
-            href="/payment"
-            onClick={() => setMobileMenuOpen(false)}
-            className="py-2.5 px-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-semibold text-center flex items-center justify-center gap-2"
-          >
-            <Zap className="w-4 h-4" />
-            <span>Resolution Pass & Pay</span>
+            Contact
           </Link>
 
           {user ? (
-            <div className="pt-2 flex items-center justify-between border-t border-slate-800">
-              <div>
-                <p className="font-bold text-slate-100">{user.name}</p>
-                <p className="text-xs text-slate-400">{user.email}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onLogout();
-                }}
-                className="px-3 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs"
+            <>
+              <Link
+                href="/cases"
+                onClick={() => setMobileMenuOpen(false)}
+                className="py-2 border-b border-slate-800/60 flex items-center justify-between"
               >
-                Sign Out
-              </button>
-            </div>
+                <span>My Cases</span>
+                <span className="text-xs text-emerald-400 font-mono">{casesCount}</span>
+              </Link>
+              <div className="pt-2 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-100">{user.name}</p>
+                  <p className="text-xs text-slate-400">{user.email || user.phone}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="px-3 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
           ) : (
             <button
               onClick={() => {
@@ -200,7 +218,7 @@ export default function Navbar({
               }}
               className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 font-semibold text-center"
             >
-              Citizen Sign In / Register
+              Citizen Sign In
             </button>
           )}
         </div>

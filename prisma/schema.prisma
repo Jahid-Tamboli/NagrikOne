@@ -7,60 +7,245 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  CITIZEN
+  ADMIN
+  NODAL_OFFICER
+}
+
+enum CaseStatus {
+  DRAFT
+  INTAKE
+  UNDER_REVIEW
+  INFORMATION_REQUIRED
+  EVIDENCE_REQUIRED
+  VERIFIED
+  READY_FOR_ROUTING
+  READY_FOR_PWD_SUBMISSION
+  READY_FOR_POLICE_SUBMISSION
+  READY_FOR_AUTHORITY_SUBMISSION
+  ROUTED_TO_SERVICE_PROVIDER
+  DISPATCHED_TO_PWD
+  DISPATCHED_TO_POLICE
+  IN_PROGRESS
+  AWAITING_AUTHORITY
+  AWAITING_CITIZEN
+  SLA_WARNING
+  ESCALATION_RECOMMENDED
+  ESCALATED
+  RESOLUTION_PENDING
+  RESOLUTION_VERIFICATION
+  STATUTORY_RESOLVED
+  CLOSED
+  REOPENED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  REFUNDED
+}
+
+enum ActorType {
+  CITIZEN
+  NOVA_AI
+  WORKFLOW_ENGINE
+  ADMIN
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+  EMAIL
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
 model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String?        @unique
+  phone         String?        @unique
+  role          Role           @default(CITIZEN)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  cases         Case[]
+  sessions      Session[]
+  payments      Payment[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model Session {
   id        String   @id @default(cuid())
-  name      String?
-  email     String?
-  phone     String?
+  userId    String
+  tokenHash String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
   createdAt DateTime @default(now())
-  cases     Case[]
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpVerification {
+  id               String    @id @default(cuid())
+  target           String    // Phone number or email address
+  otpHash          String
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(5)
+  expiresAt        DateTime
+  resendCooldownAt DateTime
+  verifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
 }
 
 model ProblemType {
-  id        String   @id
-  name      String
-  category  String
-  route     String
-  priority  String
-  questions Json
-  evidence  Json
-  createdAt DateTime @default(now())
-  cases     Case[]
+  id                      String   @id
+  name                    String
+  category                String
+  route                   String
+  priority                String   @default("MEDIUM")
+  estimatedResolutionDays Int      @default(3)
+  legalAct                String?
+  escalationLevel         String?
+  guidelines              String?
+  tags                    Json     @default("[]")
+  questions               Json     @default("[]")
+  evidence                Json     @default("[]")
+  createdAt               DateTime @default(now())
+  cases                   Case[]
 }
 
 model Case {
-  id          String       @id @default(cuid())
-  title       String
-  category    String
-  priority    String
-  status      String       @default("DRAFT")
-  description String?
-  location    String?
-  userId      String?
-  problemId   String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  user        User?        @relation(fields: [userId], references: [id])
-  problem     ProblemType? @relation(fields: [problemId], references: [id])
-  events      StatusEvent[]
-  payments    Payment[]
+  id             String          @id @default(cuid())
+  caseNumber     String          @unique @default(cuid())
+  title          String
+  category       String
+  priority       String          @default("MEDIUM")
+  status         CaseStatus      @default(DRAFT)
+  description    String?
+  location       String?
+  userId         String?
+  problemId      String?
+  isUnknownIssue Boolean         @default(false)
+  dynamicAnswers Json?           @default("{}")
+  slaDueAt       DateTime?
+  escalatedAt    DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  user           User?           @relation(fields: [userId], references: [id])
+  problem        ProblemType?    @relation(fields: [problemId], references: [id])
+  events         StatusEvent[]
+  workflowEvents WorkflowEvent[]
+  evidenceList   Evidence[]
+  payments       Payment[]
+  notifications  Notification[]
+  unknownDetails UnknownIssue?
+}
+
+model UnknownIssue {
+  id             String   @id @default(cuid())
+  caseId         String   @unique
+  rawDescription String
+  inferredDomain String?
+  confidence     Float    @default(0.5)
+  questionsAsked Json     @default("[]")
+  suggestedRoute String?
+  adminReviewed  Boolean  @default(false)
+  adminNotes     String?
+  createdAt      DateTime @default(now())
+  case           Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
 }
 
 model StatusEvent {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   caseId    String
-  status    String
+  status    CaseStatus
+  actorType ActorType  @default(NOVA_AI)
+  actorId   String?
   note      String?
-  createdAt DateTime @default(now())
-  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  metadata  Json?      @default("{}")
+  createdAt DateTime   @default(now())
+  case      Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model WorkflowEvent {
+  id            String     @id @default(cuid())
+  caseId        String
+  eventType     String
+  fromStatus    CaseStatus
+  toStatus      CaseStatus
+  automated     Boolean    @default(true)
+  triggerReason String?
+  payload       Json?      @default("{}")
+  createdAt     DateTime   @default(now())
+  case          Case       @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+model Evidence {
+  id           String   @id @default(cuid())
+  caseId       String
+  fileName     String
+  fileUrl      String
+  mimeType     String
+  sizeBytes    Int
+  ocrExtracted String?
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  case         Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
 }
 
 model Payment {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   caseId      String?
+  userId      String?
   amount      Int
-  status      String   @default("PENDING")
-  providerRef String?
-  createdAt   DateTime @default(now())
-  case        Case?    @relation(fields: [caseId], references: [id])
+  currency    String        @default("INR")
+  status      PaymentStatus @default(PENDING)
+  tier        String        @default("STANDARD")
+  providerRef String?       @unique
+  upiRrn      String?
+  metadata    Json?         @default("{}")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  case        Case?         @relation(fields: [caseId], references: [id])
+  user        User?         @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  actorId       String?
+  actorRole     String?
+  action        String
+  entityType    String
+  entityId      String?
+  previousState Json?
+  newState      Json?
+  ipAddress     String?
+  metadata      Json?     @default("{}")
+  createdAt     DateTime  @default(now())
+  user          User?     @relation(fields: [actorId], references: [id])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String?
+  caseId    String?
+  title     String
+  message   String
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(QUEUED)
+  metadata  Json?               @default("{}")
+  createdAt DateTime            @default(now())
+  user      User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  case      Case?               @relation(fields: [caseId], references: [id], onDelete: Cascade)
 }
