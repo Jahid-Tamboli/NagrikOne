@@ -5,7 +5,7 @@ export interface DetectionResult {
   problem: ProblemTypeDefinition;
   confidence: number;
   matchedKeywords: string[];
-  suggestedUrgency: 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW';
+  suggestedUrgency: 'CRITICAL' | 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW';
   extractedLocation?: string;
 }
 

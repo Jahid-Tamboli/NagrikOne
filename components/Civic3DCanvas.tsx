@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -19,7 +19,7 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeNode, setActiveNode] = useState<string | null>(null);
-  const [stats, setStats] = useState({ activeCases: 1420, verifiedRoutes: 98, resolvedToday: 342 });
+  const [stats, setStats] = useState({ activeCases: 1420, verifiedRoutes: 99, resolvedToday: 342 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,33 +28,34 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
     if (!ctx) return;
 
     let animationFrameId: number;
-    let width = (canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600);
-    let height = (canvas.height = canvas.offsetHeight * window.devicePixelRatio || 500);
+    let width = (canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1));
+    let height = (canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1));
 
     const handleResize = () => {
       if (!canvas) return;
-      width = canvas.width = canvas.offsetWidth * window.devicePixelRatio || 600;
-      height = canvas.height = canvas.offsetHeight * window.devicePixelRatio || 500;
+      width = canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
+      height = canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
     };
 
     window.addEventListener('resize', handleResize);
 
     // 3D Nodes representing resolution networks
     const nodes: Node3D[] = [
-      { label: 'GOVERNMENT', sublabel: 'RTS & Portals', category: 'Government', x: 0, y: -130, z: 20, color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.4)', radius: 18, pulsePhase: 0 },
-      { label: 'CIVIC HUB', sublabel: 'PWD & Sanitation', category: 'Civic', x: -140, y: 40, z: -40, color: '#34d399', glow: 'rgba(52, 211, 153, 0.4)', radius: 22, pulsePhase: 1 },
-      { label: 'CYBER SHIELD', sublabel: '1930 / I4C Cell', category: 'Safety', x: 130, y: 30, z: -30, color: '#f43f5e', glow: 'rgba(244, 63, 94, 0.4)', radius: 20, pulsePhase: 2 },
-      { label: 'BANKING GATE', sublabel: 'RBI Ombudsman', category: 'Banking', x: -70, y: 120, z: 60, color: '#a78bfa', glow: 'rgba(167, 139, 250, 0.4)', radius: 18, pulsePhase: 3 },
-      { label: 'CONSUMER DESK', sublabel: 'NCH Redressal', category: 'Consumer', x: 90, y: 110, z: 50, color: '#fbbf24', glow: 'rgba(251, 191, 36, 0.4)', radius: 19, pulsePhase: 4 },
-      { label: 'TELECOM GRID', sublabel: 'DoT Appellate', category: 'Telecom', x: -30, y: -50, z: -100, color: '#2dd4bf', glow: 'rgba(45, 212, 191, 0.4)', radius: 16, pulsePhase: 5 }
+      { label: 'CIVIC & PWD', sublabel: 'Municipal Ward / PWD', category: 'Civic & Municipal', x: -150, y: -40, z: 30, color: '#34d399', glow: 'rgba(52, 211, 153, 0.5)', radius: 20, pulsePhase: 0 },
+      { label: 'CYBER DEFENSE', sublabel: '1930 / I4C Portal', category: 'Cyber & Online Fraud', x: 140, y: -50, z: -30, color: '#f43f5e', glow: 'rgba(244, 63, 94, 0.5)', radius: 22, pulsePhase: 1 },
+      { label: 'POLICE & SAFETY', sublabel: 'BNSS / Mahila Desk', category: 'Police & Safety', x: 0, y: -140, z: 40, color: '#38bdf8', glow: 'rgba(56, 189, 248, 0.5)', radius: 19, pulsePhase: 2 },
+      { label: 'BANKING OMBUDSMAN', sublabel: 'RBI CMS Portal', category: 'Banking & Finance', x: -110, y: 110, z: 50, color: '#a78bfa', glow: 'rgba(167, 139, 250, 0.5)', radius: 18, pulsePhase: 3 },
+      { label: 'CONSUMER COURT', sublabel: 'e-Daakhil / NCH 1915', category: 'Consumer & E-Commerce', x: 110, y: 100, z: 40, color: '#fbbf24', glow: 'rgba(251, 191, 36, 0.5)', radius: 19, pulsePhase: 4 },
+      { label: 'WOMEN RIGHTS', sublabel: 'POSH / Helpline 181', category: 'Women Safety & Rights', x: -160, y: 30, z: -80, color: '#ec4899', glow: 'rgba(236, 72, 153, 0.5)', radius: 18, pulsePhase: 5 },
+      { label: 'TELECOM & TRAI', sublabel: 'TRAI QoS / Sanchar Saathi', category: 'Telecom & Broadband', x: 150, y: 20, z: -90, color: '#2dd4bf', glow: 'rgba(45, 212, 191, 0.5)', radius: 17, pulsePhase: 6 }
     ];
 
     // Background floating 3D particle dust
-    const particles = Array.from({ length: 65 }, () => ({
-      x: (Math.random() - 0.5) * 500,
-      y: (Math.random() - 0.5) * 450,
-      z: (Math.random() - 0.5) * 400,
-      size: Math.random() * 2 + 0.8,
+    const particles = Array.from({ length: 70 }, () => ({
+      x: (Math.random() - 0.5) * 600,
+      y: (Math.random() - 0.5) * 500,
+      z: (Math.random() - 0.5) * 500,
+      size: Math.random() * 2.5 + 0.8,
       speed: Math.random() * 0.005 + 0.002
     }));
 
@@ -69,8 +70,8 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       const rect = canvas.getBoundingClientRect();
       const clientX = e.clientX - rect.left;
       const clientY = e.clientY - rect.top;
-      targetRotY = ((clientX / rect.width) - 0.5) * 1.4;
-      targetRotX = -((clientY / rect.height) - 0.5) * 1.1;
+      targetRotY = ((clientX / rect.width) - 0.5) * 1.5;
+      targetRotX = -((clientY / rect.height) - 0.5) * 1.2;
     };
 
     const handleMouseLeave = () => {
@@ -81,8 +82,7 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseleave', handleMouseLeave);
 
-    // Projection mathematics
-    const fov = 380;
+    const fov = 400;
     function project(x: number, y: number, z: number, cx: number, cy: number) {
       const scale = fov / (fov + z);
       return {
@@ -99,7 +99,6 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       time += 0.015;
       autoRotation += 0.004;
 
-      // Smooth camera interpolation
       rotX += (targetRotX - rotX) * 0.06;
       rotY += (targetRotY - rotY) * 0.06;
 
@@ -112,25 +111,24 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
 
       // Draw cyber radial background glow
       const bgGrad = ctx.createRadialGradient(cx, cy, 30, cx, cy, width * 0.65);
-      bgGrad.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
-      bgGrad.addColorStop(0.35, 'rgba(6, 182, 212, 0.06)');
-      bgGrad.addColorStop(1, 'rgba(5, 11, 20, 0)');
+      bgGrad.addColorStop(0, 'rgba(16, 185, 129, 0.14)');
+      bgGrad.addColorStop(0.35, 'rgba(6, 182, 212, 0.08)');
+      bgGrad.addColorStop(1, 'rgba(4, 9, 20, 0)');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Render 3D Perspective Grid / Cyber Terrain Plane
+      // Render 3D Perspective Grid
       ctx.save();
       ctx.strokeStyle = 'rgba(30, 58, 88, 0.35)';
       ctx.lineWidth = 1;
-      const gridY = 160;
-      for (let gx = -240; gx <= 240; gx += 40) {
-        // Rotate grid points
+      const gridY = 170;
+      for (let gx = -260; gx <= 260; gx += 40) {
         const cosY = Math.cos(effectiveRotY * 0.3);
         const sinY = Math.sin(effectiveRotY * 0.3);
-        const rx1 = gx * cosY - (-200) * sinY;
-        const rz1 = gx * sinY + (-200) * cosY;
-        const rx2 = gx * cosY - (200) * sinY;
-        const rz2 = gx * sinY + (200) * cosY;
+        const rx1 = gx * cosY - (-220) * sinY;
+        const rz1 = gx * sinY + (-220) * cosY;
+        const rx2 = gx * cosY - (220) * sinY;
+        const rz2 = gx * sinY + (220) * cosY;
 
         const p1 = project(rx1, gridY, rz1, cx, cy);
         const p2 = project(rx2, gridY, rz2, cx, cy);
@@ -144,10 +142,10 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       }
       ctx.restore();
 
-      // Render Orbital Holographic Rings in 3D
+      // Render Holographic Rings in 3D
       ctx.save();
       const ringAngles = [time * 0.5, -time * 0.7, time * 0.3];
-      const ringRadii = [150, 190, 230];
+      const ringRadii = [160, 200, 240];
       const ringColors = ['rgba(56, 189, 248, 0.25)', 'rgba(52, 211, 153, 0.2)', 'rgba(167, 139, 250, 0.15)'];
 
       ringRadii.forEach((r, idx) => {
@@ -161,13 +159,11 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
           const pz = Math.sin(theta) * r;
           const py = Math.sin(theta * 2 + ringAngles[idx]) * 20;
 
-          // Rotate by current camera
           const cosY = Math.cos(effectiveRotY);
           const sinY = Math.sin(effectiveRotY);
           const cosX = Math.cos(rotX);
           const sinX = Math.sin(rotX);
 
-          // 3D rotation
           const x1 = px * cosY - pz * sinY;
           const z1 = px * sinY + pz * cosY;
           const y1 = py * cosX - z1 * sinX;
@@ -181,7 +177,7 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       });
       ctx.restore();
 
-      // Render 3D Floating Particles
+      // Floating particles
       particles.forEach((p) => {
         const cosY = Math.cos(effectiveRotY * 0.6);
         const sinY = Math.sin(effectiveRotY * 0.6);
@@ -199,15 +195,13 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         }
       });
 
-      // Project all nodes to 2D
+      // Project Nodes
       const projectedNodes = nodes.map((node) => {
-        // 3D Rotation
         const cosY = Math.cos(effectiveRotY);
         const sinY = Math.sin(effectiveRotY);
         const cosX = Math.cos(rotX);
         const sinX = Math.sin(rotX);
 
-        // Apply slight orbital oscillation
         const ox = node.x + Math.sin(time + node.pulsePhase) * 6;
         const oy = node.y + Math.cos(time * 0.8 + node.pulsePhase) * 8;
         const oz = node.z;
@@ -225,10 +219,9 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         };
       });
 
-      // Sort by depth for correct 3D occlusion
       projectedNodes.sort((a, b) => b.zDepth - a.zDepth);
 
-      // Render Animated 3D Energy Beams between Center Core and Nodes
+      // Render Beams to Central Core
       ctx.save();
       const coreProj = project(0, 0, 0, cx, cy);
 
@@ -243,13 +236,11 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         ctx.beginPath();
         ctx.moveTo(coreProj.x, coreProj.y);
 
-        // Quadratic curved beam
         const midX = (coreProj.x + proj.x) / 2 + Math.sin(time * 2 + i) * 15;
         const midY = (coreProj.y + proj.y) / 2 + Math.cos(time * 2 + i) * 15;
         ctx.quadraticCurveTo(midX, midY, proj.x, proj.y);
         ctx.stroke();
 
-        // Flowing photon pulse on the beam
         const pulsePos = ((time * 0.8 + i * 0.3) % 1);
         const pulseX = (1 - pulsePos) * (1 - pulsePos) * coreProj.x + 2 * (1 - pulsePos) * pulsePos * midX + pulsePos * pulsePos * proj.x;
         const pulseY = (1 - pulsePos) * (1 - pulsePos) * coreProj.y + 2 * (1 - pulsePos) * pulsePos * midY + pulsePos * pulsePos * proj.y;
@@ -264,22 +255,20 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       });
       ctx.restore();
 
-      // Draw Center Core: Holographic NagrikOne Citizen Core
+      // Central NagrikOne Core
       const coreScale = coreProj.scale;
       const corePulse = 1 + Math.sin(time * 3) * 0.08;
       const coreRadius = 42 * coreScale * corePulse;
 
-      // Core Ambient Aura
       const coreAura = ctx.createRadialGradient(coreProj.x, coreProj.y, 10, coreProj.x, coreProj.y, coreRadius * 2.2);
       coreAura.addColorStop(0, 'rgba(52, 211, 153, 0.8)');
       coreAura.addColorStop(0.5, 'rgba(6, 182, 212, 0.35)');
-      coreAura.addColorStop(1, 'rgba(5, 11, 20, 0)');
+      coreAura.addColorStop(1, 'rgba(4, 9, 20, 0)');
       ctx.fillStyle = coreAura;
       ctx.beginPath();
       ctx.arc(coreProj.x, coreProj.y, coreRadius * 2.2, 0, Math.PI * 2);
       ctx.fill();
 
-      // Core Sphere Body
       const coreBody = ctx.createRadialGradient(
         coreProj.x - coreRadius * 0.3,
         coreProj.y - coreRadius * 0.3,
@@ -297,26 +286,23 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
       ctx.arc(coreProj.x, coreProj.y, coreRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Core Outer Glowing Ring
       ctx.strokeStyle = '#a7f3d0';
       ctx.lineWidth = 2 * coreScale;
       ctx.beginPath();
       ctx.arc(coreProj.x, coreProj.y, coreRadius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Core Citizen Monogram "N1"
       ctx.fillStyle = '#022c22';
       ctx.font = `bold ${Math.round(26 * coreScale)}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('N1', coreProj.x, coreProj.y + 1);
 
-      // Render Nodes with 3D Depth
+      // Render Nodes
       projectedNodes.forEach(({ node, proj }) => {
         const radius = node.radius * proj.scale;
         const isHovered = activeNode === node.label;
 
-        // Node Glow
         ctx.save();
         const aura = ctx.createRadialGradient(proj.x, proj.y, 2, proj.x, proj.y, radius * (isHovered ? 3 : 2));
         aura.addColorStop(0, node.glow);
@@ -326,7 +312,6 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         ctx.arc(proj.x, proj.y, radius * (isHovered ? 3 : 2), 0, Math.PI * 2);
         ctx.fill();
 
-        // Node Sphere
         const sphereGrad = ctx.createRadialGradient(
           proj.x - radius * 0.3,
           proj.y - radius * 0.3,
@@ -344,12 +329,10 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         ctx.arc(proj.x, proj.y, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Node Ring
         ctx.strokeStyle = isHovered ? '#ffffff' : node.color;
         ctx.lineWidth = isHovered ? 2.5 : 1.5;
         ctx.stroke();
 
-        // Node Label Pill
         const fontSize = Math.max(9, Math.round(11 * proj.scale));
         ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
         ctx.textAlign = 'center';
@@ -388,19 +371,17 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
   }, [activeNode]);
 
   return (
-    <div ref={containerRef} className="relative w-full h-[480px] md:h-[540px] rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-b from-[#061424] via-[#040c17] to-[#02060c] shadow-[0_0_80px_rgba(6,182,212,0.15)] flex flex-col justify-between">
-      {/* 3D Interactive Canvas */}
+    <div ref={containerRef} className="relative w-full h-[460px] md:h-[520px] rounded-3xl overflow-hidden border border-emerald-500/20 bg-gradient-to-b from-[#061424] via-[#040c17] to-[#02060c] shadow-[0_0_80px_rgba(6,182,212,0.15)] flex flex-col justify-between">
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing block"
       />
 
-      {/* Top Floating Telemetry Overlay */}
       <div className="relative z-10 p-5 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-emerald-400/30 backdrop-blur-md">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
           <span className="text-[11px] font-mono tracking-wider font-semibold text-emerald-300">
-            3D CITIZEN RESOLUTION MESH • LIVE
+            3D STATUTORY RESOLUTION MESH • LIVE
           </span>
         </div>
         <div className="hidden sm:flex items-center gap-4 text-[11px] font-mono text-slate-400">
@@ -415,26 +396,26 @@ export default function Civic3DCanvas({ onSelectCategory }: { onSelectCategory?:
         </div>
       </div>
 
-      {/* Bottom Floating Interactive Category Badges */}
-      <div className="relative z-10 p-4 sm:p-6 bg-gradient-to-t from-[#030811]/90 via-[#030811]/60 to-transparent pointer-events-auto">
-        <p className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-2.5 flex items-center gap-2">
+      <div className="relative z-10 p-4 sm:p-5 bg-gradient-to-t from-[#030811]/90 via-[#030811]/60 to-transparent pointer-events-auto">
+        <p className="text-[11px] font-mono uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-2">
           <span>Explore 3D Nodes:</span>
           <span className="text-xs text-emerald-400 font-semibold">Hover or Drag to rotate in 3D</span>
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {[
-            { name: 'Civic Authority', cat: 'Civic', color: 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' },
-            { name: 'Cyber Defense (1930)', cat: 'Safety', color: 'border-rose-500/40 text-rose-300 hover:bg-rose-500/10' },
-            { name: 'Banking Grievance', cat: 'Banking', color: 'border-purple-500/40 text-purple-300 hover:bg-purple-500/10' },
-            { name: 'Consumer Court', cat: 'Consumer', color: 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' },
-            { name: 'Government Portals', cat: 'Government', color: 'border-sky-500/40 text-sky-300 hover:bg-sky-500/10' },
-            { name: 'Telecom Grid', cat: 'Telecom', color: 'border-teal-500/40 text-teal-300 hover:bg-teal-500/10' },
+            { name: 'Civic & PWD', cat: 'Civic & Municipal', color: 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' },
+            { name: 'Cybercrime (1930)', cat: 'Cyber & Online Fraud', color: 'border-rose-500/40 text-rose-300 hover:bg-rose-500/10' },
+            { name: 'Police & Safety', cat: 'Police & Safety', color: 'border-sky-500/40 text-sky-300 hover:bg-sky-500/10' },
+            { name: 'Banking Ombudsman', cat: 'Banking & Finance', color: 'border-purple-500/40 text-purple-300 hover:bg-purple-500/10' },
+            { name: 'Consumer Forum', cat: 'Consumer & E-Commerce', color: 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10' },
+            { name: 'Women Safety', cat: 'Women Safety & Rights', color: 'border-pink-500/40 text-pink-300 hover:bg-pink-500/10' },
+            { name: 'Telecom Grid', cat: 'Telecom & Broadband', color: 'border-teal-500/40 text-teal-300 hover:bg-teal-500/10' }
           ].map((pill) => (
             <button
               key={pill.name}
               type="button"
               onClick={() => onSelectCategory?.(pill.cat)}
-              className={`text-xs px-3 py-1.5 rounded-lg border bg-slate-900/60 backdrop-blur-md transition-all duration-200 ${pill.color}`}
+              className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border bg-slate-900/70 backdrop-blur-md transition-all duration-200 ${pill.color}`}
             >
               {pill.name}
             </button>
