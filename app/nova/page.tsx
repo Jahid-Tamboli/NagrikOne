@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Sparkles,
   ArrowRight,
@@ -18,12 +19,21 @@ import {
   Trash2,
   Clock3,
   HelpCircle,
-  Scale
+  Scale,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Send,
+  Square
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import AuthModal from '@/components/AuthModal';
 import NovaHeroCore, { NovaState } from '@/components/three/NovaHeroCore';
 import { AuthSession } from '@/lib/auth/session';
+import { novaVoice } from '@/lib/voice/tts';
+import { novaSTT } from '@/lib/voice/stt';
+import { MicAudioAnalyzer } from '@/lib/voice/audioAnalyzer';
 
 interface DynamicQuestion {
   id: string;
@@ -35,15 +45,31 @@ interface DynamicQuestion {
   helpText?: string;
 }
 
-export default function NovaPage() {
+interface ConversationTurn {
+  sender: 'citizen' | 'nova';
+  text: string;
+  timestamp: string;
+}
+
+function NovaContent() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get('initial') || '';
+  const initialCategory = searchParams.get('category') || '';
+
   const [user, setUser] = useState<AuthSession | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authPromptMessage, setAuthPromptMessage] = useState<string | undefined>();
 
-  const [inputProblem, setInputProblem] = useState('');
+  const [inputProblem, setInputProblem] = useState(initialQuery);
   const [customLocation, setCustomLocation] = useState('');
   const [novaState, setNovaState] = useState<NovaState>('IDLE');
+  const [micAmplitude, setMicAmplitude] = useState<number>(0);
 
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+  const [conversation, setConversation] = useState<ConversationTurn[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
@@ -55,7 +81,10 @@ export default function NovaPage() {
   const [createdCase, setCreatedCase] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Check current session
+  const audioAnalyzerRef = useRef<MicAudioAnalyzer | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Check current user session
   useEffect(() => {
     async function checkSession() {
       try {
@@ -69,13 +98,145 @@ export default function NovaPage() {
       }
     }
     checkSession();
-  }, []);
 
-  const handleStartAnalysis = async () => {
-    if (!inputProblem.trim()) {
-      setErrorMessage('Please describe the problem you are facing first.');
+    // Initial greeting if no input
+    if (!initialQuery) {
+      const greeting = "Hello! I am NOVA. Tell me what problem you are facing, and I will help you identify the right statutory path and next step.";
+      setConversation([{
+        sender: 'nova',
+        text: greeting,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }
+  }, [initialQuery]);
+
+  // Audio amplitude polling loop when listening
+  const startAudioMeter = async () => {
+    if (!audioAnalyzerRef.current) {
+      audioAnalyzerRef.current = new MicAudioAnalyzer();
+    }
+    const started = await audioAnalyzerRef.current.start();
+    if (started) {
+      const updateAmp = () => {
+        if (audioAnalyzerRef.current) {
+          const amp = audioAnalyzerRef.current.getAmplitude();
+          setMicAmplitude(amp);
+          animFrameRef.current = requestAnimationFrame(updateAmp);
+        }
+      };
+      updateAmp();
+    }
+  };
+
+  const stopAudioMeter = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioAnalyzerRef.current) {
+      audioAnalyzerRef.current.stop();
+      audioAnalyzerRef.current = null;
+    }
+    setMicAmplitude(0);
+  };
+
+  // Trigger speech synthesis
+  const speakText = (text: string) => {
+    if (!voiceEnabled) return;
+    novaVoice.stop();
+    setNovaState('ASKING');
+    setIsSpeaking(true);
+
+    novaVoice.speak(text, {
+      onStart: () => {
+        setIsSpeaking(true);
+      },
+      onEnd: () => {
+        setIsSpeaking(false);
+        setNovaState('IDLE');
+      },
+      onError: () => {
+        setIsSpeaking(false);
+        setNovaState('IDLE');
+      }
+    });
+  };
+
+  // Stop speaking
+  const handleStopSpeaking = () => {
+    novaVoice.stop();
+    setIsSpeaking(false);
+    setNovaState('IDLE');
+  };
+
+  // Toggle Voice Input / Microphone
+  const handleToggleMic = () => {
+    if (isSpeaking) {
+      handleStopSpeaking();
+    }
+
+    if (isListening) {
+      novaSTT.stopListening();
+      stopAudioMeter();
+      setIsListening(false);
+      setNovaState('IDLE');
       return;
     }
+
+    setIsListening(true);
+    setNovaState('LISTENING');
+    startAudioMeter();
+
+    const success = novaSTT.startListening({
+      lang: 'en-IN',
+      onResult: (transcript, isFinal) => {
+        setInputProblem(transcript);
+        if (isFinal && transcript.trim()) {
+          novaSTT.stopListening();
+          stopAudioMeter();
+          setIsListening(false);
+          // Automatically analyze the spoken input
+          runTriage(transcript);
+        }
+      },
+      onError: (err) => {
+        console.warn('STT Error:', err);
+        stopAudioMeter();
+        setIsListening(false);
+        setNovaState('IDLE');
+      },
+      onEnd: () => {
+        stopAudioMeter();
+        setIsListening(false);
+        if (novaState === 'LISTENING') {
+          setNovaState('IDLE');
+        }
+      }
+    });
+
+    if (!success) {
+      stopAudioMeter();
+      setIsListening(false);
+      setNovaState('IDLE');
+      setErrorMessage('Microphone access unavailable or unsupported. Please type your problem below.');
+    }
+  };
+
+  const runTriage = async (textToAnalyze: string) => {
+    if (!textToAnalyze.trim()) {
+      setErrorMessage('Please provide a description of the issue first.');
+      return;
+    }
+
+    // Add citizen turn to transcript
+    setConversation(prev => [
+      ...prev,
+      {
+        sender: 'citizen',
+        text: textToAnalyze,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
 
     setErrorMessage(null);
     setNovaState('THINKING');
@@ -86,7 +247,7 @@ export default function NovaPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: inputProblem,
+          text: textToAnalyze,
           location: customLocation || undefined
         })
       });
@@ -100,10 +261,24 @@ export default function NovaPage() {
       setNovaState('CLASSIFYING');
       setAnalysisResult(data);
 
-      // Transition to idle after classification visual pulse
-      setTimeout(() => {
-        setNovaState('IDLE');
-      }, 2500);
+      const spokenResponse = data.classification.summary 
+        ? `${data.classification.summary}. I've identified the statutory route as ${data.route.targetDepartment || 'the relevant authority'}. Let's review the required details.`
+        : `I understand. I have mapped this to ${data.classification.domain} under ${data.route.statutoryFramework || 'applicable frameworks'}.`;
+
+      setConversation(prev => [
+        ...prev,
+        {
+          sender: 'nova',
+          text: spokenResponse,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+
+      if (voiceEnabled) {
+        speakText(spokenResponse);
+      } else {
+        setTimeout(() => setNovaState('IDLE'), 1800);
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Error analyzing issue with NOVA.');
       setNovaState('IDLE');
@@ -150,7 +325,7 @@ export default function NovaPage() {
       return;
     }
 
-    if (!analysisResult?.problem) return;
+    if (!analysisResult) return;
 
     setCreatingCase(true);
     setErrorMessage(null);
@@ -161,34 +336,33 @@ export default function NovaPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: analysisResult.problem.name,
-          category: analysisResult.problem.category,
-          priority: analysisResult.classification?.suggestedUrgency || analysisResult.problem.priority,
+          problemTypeId: analysisResult.classification.domain === 'UNKNOWN' ? undefined : analysisResult.classification.problemCode,
+          title: analysisResult.classification.domain === 'UNKNOWN' 
+            ? `Dispute: ${inputProblem.slice(0, 50)}...`
+            : `${analysisResult.classification.domain} Issue`,
           description: inputProblem,
-          location: customLocation || analysisResult.location,
-          problemId: analysisResult.problem.id,
-          isUnknownIssue: analysisResult.classification?.isUnknown || false,
-          inferredDomain: analysisResult.classification?.inferredDomain,
-          dynamicAnswers,
-          evidence: evidenceFiles
+          location: customLocation || 'Unspecified Jurisdiction',
+          customAnswers: dynamicAnswers,
+          evidenceFiles: evidenceFiles,
+          routeRecommendation: analysisResult.route
         })
       });
 
-      const newCase = await res.json();
+      const data = await res.json();
 
-      if (!res.ok || !newCase.id) {
-        if (newCase.requireAuth) {
-          setAuthPromptMessage('Before we start, please log in so I can securely save your problem, documents and case status.');
-          setAuthModalOpen(true);
-          return;
-        }
-        throw new Error(newCase.error || 'Could not create persistent case.');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create persistent case.');
       }
 
-      setCreatedCase(newCase);
+      setCreatedCase(data.case);
       setNovaState('CASE_CREATED');
+
+      const successVoice = `Your case ${data.case.id} has been securely created. All statutory timelines and events are now actively tracked.`;
+      if (voiceEnabled) {
+        speakText(successVoice);
+      }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to create case.');
+      setErrorMessage(err.message || 'Could not create case.');
       setNovaState('IDLE');
     } finally {
       setCreatingCase(false);
@@ -196,13 +370,10 @@ export default function NovaPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
+    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950 pb-24">
       <Navbar
         user={user}
-        onOpenAuth={() => {
-          setAuthPromptMessage(undefined);
-          setAuthModalOpen(true);
-        }}
+        onOpenAuth={() => setAuthModalOpen(true)}
         onLogout={async () => {
           await fetch('/api/auth/session', { method: 'DELETE' });
           setUser(null);
@@ -211,300 +382,409 @@ export default function NovaPage() {
 
       <AuthModal
         isOpen={authModalOpen}
-        initialMessage={authPromptMessage}
         onClose={() => setAuthModalOpen(false)}
+        customPrompt={authPromptMessage}
         onLoginSuccess={(u) => {
           setUser(u);
+          setAuthPromptMessage(undefined);
         }}
       />
 
-      <div className="container-box py-8 lg:py-12">
-        {/* Top Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>NOVA CONVERSATIONAL INTELLIGENCE</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-50 tracking-tight">
-              Explain your situation naturally.
-            </h1>
+      <div className="container-box pt-8 sm:pt-12 max-w-5xl">
+        
+        {/* ============================================================ */}
+        {/* CENTRAL NOVA INTELLIGENCE EXPERIENCE                          */}
+        {/* ============================================================ */}
+        <div className="flex flex-col items-center justify-center text-center space-y-4 mb-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-xs font-mono">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>NOVA CITIZEN INTELLIGENCE</span>
           </div>
 
-          <Link
-            href="/how-it-works"
-            className="text-xs font-mono text-slate-400 hover:text-cyan-300 flex items-center gap-1.5 transition-colors"
-          >
-            <span>How NOVA Processes Issues</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-50 tracking-tight">
+            Tell NOVA what you're facing.
+          </h1>
 
-        {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-xs flex items-center justify-between animate-fadeIn">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-            <button onClick={() => setErrorMessage(null)} className="text-rose-400 hover:text-rose-200">
-              ✕
+          {/* Dominant Living 3D Core */}
+          <div className="py-2">
+            <NovaHeroCore
+              state={novaState}
+              amplitude={micAmplitude}
+              size="hero"
+              onCoreClick={() => {
+                if (isSpeaking) handleStopSpeaking();
+                else handleToggleMic();
+              }}
+            />
+          </div>
+
+          {/* Voice Controls Bar */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleMic}
+              className={`px-5 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 transition-all ${
+                isListening
+                  ? 'bg-rose-600 text-white shadow-[0_0_20px_rgba(225,29,72,0.5)] animate-pulse'
+                  : 'bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200'
+              }`}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-cyan-400" />}
+              <span>{isListening ? 'Stop Listening' : 'Speak to NOVA'}</span>
+            </button>
+
+            {isSpeaking && (
+              <button
+                onClick={handleStopSpeaking}
+                className="px-4 py-2.5 rounded-full bg-slate-900 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5"
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>Stop Voice</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setVoiceEnabled(!voiceEnabled)}
+              title={voiceEnabled ? 'Voice Responses Enabled' : 'Voice Responses Muted'}
+              className="p-2.5 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400"
+            >
+              {voiceEnabled ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4" />}
             </button>
           </div>
-        )}
+        </div>
 
-        <div className="grid lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Natural Language Input & Dynamic Questions */}
-          <div className="lg:col-span-7 space-y-6">
-            {!createdCase ? (
-              <>
-                {/* Natural Input Box */}
-                <div className="p-6 rounded-3xl bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 shadow-2xl focus-within:border-cyan-500/60 transition-all">
-                  <label className="text-xs font-mono text-slate-400 uppercase tracking-wider block mb-2 font-bold">
-                    Tell NOVA what you are facing:
-                  </label>
-                  <textarea
-                    value={inputProblem}
-                    onChange={(e) => setInputProblem(e.target.value)}
-                    placeholder="e.g. 'My landlord is refusing to return my deposit of ₹45,000 after move out' or 'UPI payment was deducted but merchant didn't get it' or 'Street light is broken for 2 weeks'..."
-                    className="w-full min-h-[120px] bg-transparent border-none outline-none text-base text-slate-100 placeholder:text-slate-600 resize-none"
-                  />
-
-                  {/* Evidence Attachments */}
-                  {evidenceFiles.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-800/80 mb-3">
-                      {evidenceFiles.map((file, idx) => (
-                        <div
-                          key={idx}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-xs font-mono"
-                        >
-                          <FileCheck className="w-3.5 h-3.5 text-cyan-400" />
-                          <span className="max-w-[140px] truncate">{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx))}
-                            className="text-rose-400 hover:text-rose-300"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-cyan-300 hover:border-cyan-500 transition-colors"
-                        title="Upload Photo / PDF Evidence"
-                      >
-                        <UploadCloud className="w-4 h-4" />
-                      </button>
-
-                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300">
-                        <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-                        <input
-                          type="text"
-                          value={customLocation}
-                          onChange={(e) => setCustomLocation(e.target.value)}
-                          placeholder="Locality / City (Optional)"
-                          className="bg-transparent border-none outline-none text-xs text-slate-200 placeholder:text-slate-500 w-36 sm:w-44"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleStartAnalysis}
-                      disabled={analyzing}
-                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-[0_0_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-                    >
-                      {analyzing ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>NOVA Analyzing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Understand & Triage</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Dynamic Questions Panel */}
-                {analysisResult && (
-                  <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-cyan-500/40 shadow-2xl space-y-6 animate-fadeIn">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                      <div>
-                        <span className="text-[10.5px] font-mono uppercase tracking-widest text-cyan-400 font-bold">
-                          CLARIFYING QUESTIONS
-                        </span>
-                        <h2 className="text-xl font-bold text-slate-100 mt-0.5">
-                          {analysisResult.problem.name}
-                        </h2>
-                      </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/40">
-                        {analysisResult.classification?.suggestedUrgency || 'MEDIUM'} PRIORITY
-                      </span>
-                    </div>
-
-                    {/* Reasoning Note */}
-                    <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 flex items-start gap-3">
-                      <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="block text-slate-100 font-semibold mb-0.5">NOVA Assessment:</strong>
-                        <span>{analysisResult.classification?.reasoning}</span>
-                      </div>
-                    </div>
-
-                    {/* Questions Form */}
-                    <div className="space-y-4">
-                      {((analysisResult.dynamicQuestions || []) as DynamicQuestion[]).map((q, idx) => (
-                        <div key={q.id} className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800">
-                          <label className="text-xs font-bold text-slate-200 block mb-2">
-                            <span className="text-cyan-400 font-mono mr-1.5">0{idx + 1}.</span>
-                            {q.question}
-                          </label>
-
-                          {q.type === 'choice' && q.options ? (
-                            <div className="grid sm:grid-cols-2 gap-2 mt-2">
-                              {q.options.map((opt) => (
-                                <button
-                                  key={opt}
-                                  type="button"
-                                  onClick={() => setDynamicAnswers((prev) => ({ ...prev, [q.id]: opt }))}
-                                  className={`p-2.5 rounded-xl border text-xs text-left transition-all ${
-                                    dynamicAnswers[q.id] === opt
-                                      ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 font-semibold'
-                                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                                  }`}
-                                >
-                                  {opt}
-                                </button>
-                              ))}
-                            </div>
-                          ) : (
-                            <input
-                              type="text"
-                              value={dynamicAnswers[q.id] || ''}
-                              onChange={(e) => setDynamicAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                              placeholder={q.placeholder || 'Enter details...'}
-                              className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-cyan-400"
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Summary & Create Case Confirmation */}
-                    <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-slate-400 block">Recommended Pathway:</span>
-                        <strong className="text-xs text-cyan-300 font-mono">{analysisResult.problem.route}</strong>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleCreatePersistentCase}
-                        disabled={creatingCase}
-                        className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(16,185,129,0.35)] transition-all disabled:opacity-50"
-                      >
-                        {creatingCase ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                            <span>Creating Case Dossier...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                            <span>Confirm & Create Case</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              /* Case Created Success Screen */
-              <div className="p-8 rounded-3xl bg-gradient-to-b from-[#081e28] to-[#040f17] border border-emerald-500/50 shadow-2xl text-center space-y-6 animate-fadeIn">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-
-                <div>
-                  <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-500/40">
-                    CASE DOSSIER SECURELY GENERATED
+        {/* ============================================================ */}
+        {/* CONVERSATION TRANSCRIPT & INPUT AREA                          */}
+        {/* ============================================================ */}
+        <div className="rounded-3xl p-5 sm:p-7 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800/80 shadow-2xl space-y-6 mb-8">
+          
+          {/* Transcript Feed */}
+          <div className="space-y-3.5 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+            {conversation.map((turn, idx) => (
+              <div
+                key={idx}
+                className={`flex gap-3 text-xs sm:text-sm ${
+                  turn.sender === 'citizen' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-2xl p-3.5 leading-relaxed font-sans ${
+                    turn.sender === 'citizen'
+                      ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-slate-950 font-semibold'
+                      : 'bg-slate-900/90 border border-slate-800 text-slate-200 shadow-sm'
+                  }`}
+                >
+                  <p>{turn.text}</p>
+                  <span className="text-[10px] opacity-60 block mt-1 text-right font-mono">
+                    {turn.timestamp}
                   </span>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-50 mt-2">
-                    {createdCase.title}
-                  </h2>
-                  <p className="text-sm font-mono text-cyan-300 mt-1">
-                    Case ID: <strong className="font-extrabold">{createdCase.caseNumber || createdCase.id}</strong>
-                  </p>
                 </div>
+              </div>
+            ))}
+          </div>
 
-                <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-left text-xs text-slate-300 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Status:</span>
-                    <span className="font-mono text-cyan-400 font-semibold">{createdCase.status}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Category:</span>
-                    <span>{createdCase.category}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Target Route:</span>
-                    <span className="text-emerald-300 font-semibold">{analysisResult?.problem?.route || 'Official Review'}</span>
-                  </div>
-                </div>
+          {/* Interactive Input Form */}
+          <div className="space-y-3 pt-2 border-t border-slate-800/80">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={inputProblem}
+                onChange={(e) => setInputProblem(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') runTriage(inputProblem);
+                }}
+                placeholder="Type your issue... (e.g. My landlord refuses to return my ₹45,000 security deposit)"
+                className="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400 font-sans"
+              />
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                  <Link
-                    href={`/cases/${createdCase.id}`}
-                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg hover:opacity-95 transition-opacity"
-                  >
-                    <span>Track Case Dossier</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
+              <button
+                onClick={() => runTriage(inputProblem)}
+                disabled={analyzing}
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.3)] whitespace-nowrap transition-all disabled:opacity-50"
+              >
+                {analyzing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Analyze Issue</span>
+                    <Send className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCreatedCase(null);
-                      setAnalysisResult(null);
-                      setInputProblem('');
-                      setEvidenceFiles([]);
-                      setNovaState('IDLE');
-                    }}
-                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-semibold text-xs hover:text-white"
-                  >
-                    Start Another Case
-                  </button>
-                </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+              <input
+                type="text"
+                value={customLocation}
+                onChange={(e) => setCustomLocation(e.target.value)}
+                placeholder="Optional Location / City (e.g. Pune, Maharashtra)"
+                className="w-full bg-transparent text-xs text-slate-400 placeholder:text-slate-600 outline-none font-mono"
+              />
+            </div>
+
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{errorMessage}</span>
               </div>
             )}
           </div>
+        </div>
 
-          {/* Right Column: 3D NOVA Core Visualizer */}
-          <div className="lg:col-span-5">
-            <div className="sticky top-28 bg-[#040914] border border-slate-800/80 rounded-3xl p-2 shadow-2xl">
-              <NovaHeroCore state={novaState} />
+        {/* ============================================================ */}
+        {/* ANALYSIS RESULT & DYNAMIC QUESTIONS SECTION                  */}
+        {/* ============================================================ */}
+        {analysisResult && (
+          <div className="space-y-6 animate-fade-in">
+            
+            {/* Structured Solution Header */}
+            <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-cyan-500/30 shadow-xl space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold">
+                    {analysisResult.classification.domain}
+                  </span>
+                  <span className="text-xs font-mono text-slate-400">
+                    Confidence: {Math.round(analysisResult.classification.confidence * 100)}%
+                  </span>
+                </div>
+
+                <div className="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
+                  <Clock3 className="w-4 h-4" />
+                  <span>Statutory SLA: {analysisResult.route.estimatedSlaDays} Days</span>
+                </div>
+              </div>
+
+              {/* Solution Overview */}
+              <div className="space-y-3">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-50">
+                  Recommended Statutory Path
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+                  {analysisResult.route.actionPlan}
+                </p>
+              </div>
+
+              {/* Target Authority & Checklist */}
+              <div className="grid sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider block">Target Authority</span>
+                  <strong className="text-sm text-cyan-300 font-bold block">{analysisResult.route.targetDepartment}</strong>
+                  <span className="text-xs text-slate-400 block">{analysisResult.route.statutoryFramework}</span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider block">Next Immediate Step</span>
+                  <strong className="text-sm text-emerald-300 font-bold block">{analysisResult.route.nextImmediateStep}</strong>
+                  <span className="text-xs text-slate-400 block">{analysisResult.route.legalNoticeRecommended ? 'Legal Notice / Formal Dispute Recommended' : 'Direct RTS Submission Available'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Dynamic Contextual Questions */}
+            {analysisResult.questions && analysisResult.questions.length > 0 && (
+              <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 space-y-6">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-slate-100 flex items-center gap-2">
+                    <HelpCircle className="w-5 h-5 text-cyan-400" />
+                    <span>Case Fact Verification</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    NOVA requires these essential details to prepare your formal case docket accurately.
+                  </p>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {analysisResult.questions.map((q: DynamicQuestion) => (
+                    <div key={q.id} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
+                      <label className="text-xs font-bold text-slate-200 block">
+                        {q.question} {q.required && <span className="text-rose-400">*</span>}
+                      </label>
+
+                      {q.type === 'choice' && q.options ? (
+                        <select
+                          value={dynamicAnswers[q.id] || ''}
+                          onChange={(e) => setDynamicAnswers({ ...dynamicAnswers, [q.id]: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-400 font-sans"
+                        >
+                          <option value="">Select option...</option>
+                          {q.options.map((opt, i) => (
+                            <option key={i} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : q.type === 'boolean' ? (
+                        <div className="flex gap-2">
+                          {['Yes', 'No'].map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setDynamicAnswers({ ...dynamicAnswers, [q.id]: opt })}
+                              className={`flex-1 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                                dynamicAnswers[q.id] === opt
+                                  ? 'bg-cyan-950 border-cyan-400 text-cyan-300'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder={q.placeholder || 'Your answer...'}
+                          value={dynamicAnswers[q.id] || ''}
+                          onChange={(e) => setDynamicAnswers({ ...dynamicAnswers, [q.id]: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-400 font-sans"
+                        />
+                      )}
+
+                      {q.helpText && (
+                        <span className="text-[10px] text-slate-500 block font-mono">{q.helpText}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Evidence Attachment Section */}
+            <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+                    <UploadCloud className="w-5 h-5 text-cyan-400" />
+                    <span>Evidence & Document Verification</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Attach receipts, screenshots, notices, or photographs to strengthen statutory enforceability.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <Camera className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Upload File</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  accept="image/png,image/jpeg,image/webp,application/pdf"
+                />
+              </div>
+
+              {evidenceFiles.length > 0 ? (
+                <div className="space-y-2 pt-2">
+                  {evidenceFiles.map((f, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 text-slate-200">
+                        <FileCheck className="w-4 h-4 text-emerald-400" />
+                        <span className="font-semibold truncate max-w-xs">{f.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">({Math.round(f.size / 1024)} KB)</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-400 font-mono uppercase">Verified</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-900/40 border border-dashed border-slate-800 text-center text-xs text-slate-500 font-mono">
+                  No files attached yet. (PDF, JPG, PNG up to 10MB)
+                </div>
+              )}
+            </div>
+
+            {/* Persistent Case Creation Action */}
+            <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs text-slate-400 font-mono">
+                {user ? (
+                  <span className="text-emerald-400">✓ Logged in as {user.name || user.phone}</span>
+                ) : (
+                  <span className="text-amber-400">⚠ Login required before saving persistent case</span>
+                )}
+              </div>
+
+              <button
+                onClick={handleCreatePersistentCase}
+                disabled={creatingCase}
+                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(16,185,129,0.35)] transition-all disabled:opacity-50"
+              >
+                {creatingCase ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Creating Case & Event Timeline...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-slate-950" />
+                    <span>Create Persistent Case & Track</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* CASE CREATED SUCCESS MODAL / CARD                            */}
+        {/* ============================================================ */}
+        {createdCase && (
+          <div className="mt-8 rounded-3xl p-8 bg-gradient-to-b from-[#091e1d] to-[#040914] border border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.2)] space-y-6 animate-fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/50 flex items-center justify-center text-emerald-300">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-50">Your Case is Ready & Active</h2>
+                <span className="text-xs font-mono text-emerald-400 font-bold">Case Reference: {createdCase.id}</span>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+              Your case has been logged into the NagrikOne deterministic workflow engine. All statutory SLAs, escalation triggers, and evidence attachments are securely stored.
+            </p>
+
+            <div className="pt-2 flex flex-wrap gap-4">
+              <Link
+                href={`/cases/${createdCase.id}`}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all"
+              >
+                <span>Open Live Case Tracker</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+
+              <Link
+                href="/cases"
+                className="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-slate-300 font-bold text-xs transition-colors"
+              >
+                <span>View All My Cases</span>
+              </Link>
+            </div>
+          </div>
+        )}
+
       </div>
     </main>
+  );
+}
+
+export default function NovaPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#030712] flex items-center justify-center text-xs font-mono text-cyan-400">
+        Loading NOVA Intelligence...
+      </div>
+    }>
+      <NovaContent />
+    </Suspense>
   );
 }

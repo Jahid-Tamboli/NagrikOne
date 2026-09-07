@@ -35,7 +35,7 @@ function PaymentContent() {
   const [user, setUser] = useState<AuthSession | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
-  const [selectedTier, setSelectedTier] = useState<'STANDARD' | 'PRIORITY' | 'LEGAL' | 'VIP'>('PRIORITY');
+  const [selectedTier, setSelectedTier] = useState<'ASSISTED_DRAFT' | 'LEGAL_NOTICE' | 'CONCIERGE'>('LEGAL_NOTICE');
   const [caseId, setCaseId] = useState(caseIdFromUrl);
   const [copied, setCopied] = useState(false);
 
@@ -52,33 +52,25 @@ function PaymentContent() {
   const [cameraPermission, setCameraPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const [timerSeconds, setTimerSeconds] = useState(600);
-
-  const tiers: Record<'STANDARD' | 'PRIORITY' | 'LEGAL' | 'VIP', { name: string; amount: number; desc: string; features: string[]; popular?: boolean }> = {
-    STANDARD: {
-      name: 'Standard Citizen Filing',
-      amount: 49,
-      desc: 'Official statutory portal preparation & auto-drafted grievance dossier',
-      features: ['Official portal preparation', 'Auto-drafted docket', 'Email acknowledgment']
-    },
-    PRIORITY: {
-      name: 'Priority Fast-Track Pass',
+  const tiers: Record<'ASSISTED_DRAFT' | 'LEGAL_NOTICE' | 'CONCIERGE', { name: string; amount: number; desc: string; features: string[]; popular?: boolean }> = {
+    ASSISTED_DRAFT: {
+      name: 'Assisted Document Drafting',
       amount: 199,
-      desc: 'High-priority SLA monitoring + daily status updates + SMS escalation alerts',
-      features: ['2x Faster Triage Routing', 'Daily SMS/WhatsApp alerts', 'Dedicated Case Officer', 'RTI Pre-draft Included'],
+      desc: 'Expert compilation of your grievance dossier, structured evidence summary, and RTS submission template',
+      features: ['Full grievance dossier compilation', 'Statutory department evidence checklist', 'Daily SMS/Email milestone alerts', 'RTS first-appeal framework guidance']
+    },
+    LEGAL_NOTICE: {
+      name: 'Formal Notice & Dispute Dossier',
+      amount: 499,
+      desc: 'Formal statutory notice draft with relevant legal citations, consumer protection clauses, and direct escalation pathway',
+      features: ['Legally structured notice draft', 'Consumer Protection Act / RBI citation mapping', 'RTI application pre-filled package', 'Dedicated case follow-up officer'],
       popular: true
     },
-    LEGAL: {
-      name: 'Legal Notice & RTI Pass',
-      amount: 499,
-      desc: 'Formal legal notice drafting with legal citation + RTI First Appeal guide',
-      features: ['Advocate-reviewed notice draft', 'RTI First Appeal dossier', 'Tribunal escalation guide', 'Direct call advisory']
-    },
-    VIP: {
-      name: 'VIP / High-Court Advisory',
+    CONCIERGE: {
+      name: 'Dedicated Advisory Concierge',
       amount: 999,
-      desc: 'End-to-end legal concierge with dedicated panel advocate guidance',
-      features: ['Dedicated Legal Concierge', 'High Court Writ Guidance', 'Priority Tele-Consult', '100% SLA Guarantee']
+      desc: 'End-to-end procedural support for high-stakes financial, property, or administrative disputes',
+      features: ['Dedicated case concierge', 'Multi-authority escalation roadmap', 'Priority document review within 24h', 'Direct phone advisory support']
     }
   };
 
@@ -98,7 +90,7 @@ function PaymentContent() {
   }, []);
 
   // Initialize payment intent with server
-  const initializePayment = async () => {
+  const initializeIntent = async () => {
     setInitializing(true);
     setVerificationError(null);
     try {
@@ -112,46 +104,40 @@ function PaymentContent() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to initialize payment.');
+        throw new Error(data.error || 'Failed to initialize payment intent');
       }
       setInitPaymentData(data);
     } catch (err: any) {
-      setVerificationError(err.message || 'Error initializing secure payment.');
+      setVerificationError(err.message || 'Error generating UPI intent.');
     } finally {
       setInitializing(false);
     }
   };
 
   useEffect(() => {
-    initializePayment();
+    initializeIntent();
   }, [selectedTier, caseId]);
 
-  // Expiry countdown timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimerSeconds((prev) => (prev > 0 ? prev - 1 : 600));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatTimer = (s: number) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  // Copy UPI string
+  const handleCopyUPI = () => {
+    if (!initPaymentData?.upiUri) return;
+    navigator.clipboard.writeText(initPaymentData.upiUri);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleCopyUpi = () => {
-    const upi = initPaymentData?.upiId || '8208583788@kotak811';
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(upi);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // Real Server-Side Verification
+  // Verify Payment RRN
   const handleVerifyPayment = async () => {
-    if (!initPaymentData?.refId) return;
+    if (!upiRrnInput.trim() || upiRrnInput.trim().length < 6) {
+      setVerificationError('Please enter a valid 12-digit UPI UTR / RRN reference number.');
+      return;
+    }
+
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
     setVerifying(true);
     setVerificationError(null);
 
@@ -160,59 +146,60 @@ function PaymentContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          refId: initPaymentData.refId,
-          upiRrn: upiRrnInput.trim() || undefined
+          referenceId: initPaymentData?.referenceId || `PAY-${Date.now()}`,
+          upiRrn: upiRrnInput.trim(),
+          amount: currentTier.amount,
+          caseId: caseId || undefined,
+          tier: selectedTier
         })
       });
 
       const data = await res.json();
-
-      if (!res.ok || !data.verified) {
-        throw new Error(data.message || 'Payment confirmation is awaiting bank network settlement. Please enter your 12-digit UPI RRN / UTR number.');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Payment verification failed');
       }
 
       setVerifiedPayment(data.payment);
     } catch (err: any) {
-      setVerificationError(err.message || 'Payment verification failed.');
+      setVerificationError(err.message || 'Unable to verify transaction. Please re-check the 12-digit UTR.');
     } finally {
       setVerifying(false);
     }
   };
 
-  // QR Camera Scanner
-  const startCameraScanner = async () => {
+  // Camera QR Scanner
+  const handleStartScanner = async () => {
     setScannerOpen(true);
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          setCameraPermission('granted');
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      setCameraPermission('granted');
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
       }
     } catch (err) {
       setCameraPermission('denied');
     }
   };
 
-  const stopCameraScanner = () => {
+  const handleStopScanner = () => {
     if (videoRef.current && videoRef.current.srcObject) {
       const stream = videoRef.current.srcObject as MediaStream;
       stream.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
     }
     setScannerOpen(false);
   };
 
-  const handlePrintReceipt = () => {
-    window.print();
-  };
-
   return (
-    <div className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
+    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950 pb-24">
       <Navbar
         user={user}
         onOpenAuth={() => setAuthModalOpen(true)}
-        onLogout={() => setUser(null)}
+        onLogout={async () => {
+          await fetch('/api/auth/session', { method: 'DELETE' });
+          setUser(null);
+        }}
       />
 
       <AuthModal
@@ -221,316 +208,273 @@ function PaymentContent() {
         onLoginSuccess={(u) => setUser(u)}
       />
 
-      <div className="container-box py-10 lg:py-14 max-w-6xl">
-        {/* Header Breadcrumb */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+      <div className="container-box py-10 lg:py-14 max-w-5xl">
+        
+        {/* Navigation Breadcrumb */}
+        <div className="flex items-center justify-between gap-4 mb-8">
           <Link
-            href="/"
+            href={caseId ? `/cases/${caseId}` : '/'}
             className="inline-flex items-center gap-2 text-xs font-mono text-slate-400 hover:text-cyan-300 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Return to Resolution Center</span>
+            <span>{caseId ? `Back to Case ${caseId}` : 'Return to Home'}</span>
           </Link>
 
-          <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
-            <span className="flex items-center gap-1.5 text-cyan-400">
-              <ShieldCheck className="w-4 h-4" />
-              NPCI UPI 2.0 Compliant
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1.5 text-slate-300">
-              <Lock className="w-3.5 h-3.5" />
-              Server-Side Verified
-            </span>
+          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Encrypted NPCI UPI Gateway</span>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-12 gap-8 items-start">
-          {/* Left: Tiers & QR Scanner */}
-          <div className="lg:col-span-7 space-y-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold mb-2">
-                <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                <span>OFFICIAL RESOLUTION FAST-TRACK PASS</span>
+        {/* Free vs Paid Clarity Banner */}
+        <div className="mb-10 rounded-3xl p-6 bg-gradient-to-b from-[#081322] to-[#040914] border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="text-[10.5px] font-mono text-cyan-400 uppercase tracking-widest font-bold">
+              Citizen Support Principle
+            </span>
+            <h2 className="text-base sm:text-lg font-black text-slate-100">
+              Standard guidance and problem classification are always 100% free.
+            </h2>
+            <p className="text-xs text-slate-400 font-sans">
+              Choose an assisted service only if you require dedicated document drafting, formal statutory notices, or legal concierge assistance.
+            </p>
+          </div>
+
+          <Link
+            href="/nova"
+            className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-cyan-300 font-bold text-xs whitespace-nowrap transition-colors"
+          >
+            Continue with Free NOVA
+          </Link>
+        </div>
+
+        {/* ============================================================ */}
+        {/* SUCCESSFUL PAYMENT RECEIPT STATE                             */}
+        {/* ============================================================ */}
+        {verifiedPayment ? (
+          <div className="rounded-3xl p-8 bg-gradient-to-b from-[#091e1d] to-[#040914] border border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.2)] space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-emerald-300">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-50 tracking-tight">
-                Select Resolution Level
-              </h1>
-              <p className="text-xs text-slate-400 mt-1">
-                Choose the statutory acceleration pass for your case docket.
-              </p>
+              <div>
+                <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold tracking-widest">
+                  SERVICE ACTIVATED
+                </span>
+                <h1 className="text-2xl font-black text-slate-50">
+                  Assisted Service Confirmed
+                </h1>
+              </div>
             </div>
 
-            {/* Target Case Linking */}
-            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
-              <label className="text-[11px] font-mono uppercase text-slate-400 block mb-1.5 font-bold">
-                Target Resolution Case ID (Optional)
-              </label>
-              <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700">
-                <FileCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                <input
-                  type="text"
-                  value={caseId}
-                  onChange={(e) => setCaseId(e.target.value)}
-                  placeholder="e.g. N1-2026-89412 or leave blank for direct citizen pass"
-                  className="w-full bg-transparent border-none outline-none text-xs font-mono text-cyan-300 placeholder:text-slate-600"
-                />
+            <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+              Your payment of <strong className="text-emerald-400">₹{verifiedPayment.amount}</strong> for <strong className="text-slate-100">{currentTier.name}</strong> has been verified and linked. A dedicated case officer has been assigned to compile your dossier.
+            </p>
+
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs font-mono">
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase">Payment Ref</span>
+                <span className="text-slate-200 font-bold">{verifiedPayment.referenceId || verifiedPayment.id}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase">UPI UTR / RRN</span>
+                <span className="text-cyan-400 font-bold">{verifiedPayment.upiRrn}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase">Linked Case</span>
+                <span className="text-slate-200 font-bold">{verifiedPayment.caseId || caseId || 'General Account'}</span>
               </div>
             </div>
 
-            {/* 4 Plan Tier Selection Cards */}
-            <div className="grid sm:grid-cols-2 gap-3">
-              {(Object.keys(tiers) as Array<keyof typeof tiers>).map((k) => {
-                const tier = tiers[k];
-                const isSelected = selectedTier === k;
+            <div className="flex flex-wrap gap-4 pt-2">
+              {caseId ? (
+                <Link
+                  href={`/cases/${caseId}`}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-black text-xs flex items-center gap-2"
+                >
+                  <span>Open Updated Case Docket</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              ) : (
+                <Link
+                  href="/cases"
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-black text-xs flex items-center gap-2"
+                >
+                  <span>View My Cases</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-12 gap-8">
+            
+            {/* Left Column: Assisted Service Selection */}
+            <div className="lg:col-span-6 space-y-4">
+              <h2 className="text-sm font-mono font-bold text-slate-300 uppercase tracking-wider">
+                Select Assisted Service Level
+              </h2>
+
+              {(Object.keys(tiers) as Array<'ASSISTED_DRAFT' | 'LEGAL_NOTICE' | 'CONCIERGE'>).map((tierKey) => {
+                const tier = tiers[tierKey];
+                const isSelected = selectedTier === tierKey;
+
                 return (
                   <div
-                    key={k}
-                    onClick={() => setSelectedTier(k)}
-                    className={`relative p-5 rounded-3xl border cursor-pointer transition-all flex flex-col justify-between ${
+                    key={tierKey}
+                    onClick={() => setSelectedTier(tierKey)}
+                    className={`cursor-pointer rounded-3xl p-6 transition-all duration-300 border relative ${
                       isSelected
-                        ? 'bg-cyan-950/40 border-cyan-500 shadow-[0_0_25px_rgba(6,182,212,0.2)]'
-                        : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                        ? 'bg-gradient-to-b from-[#0c1f33] to-[#040914] border-cyan-400/80 shadow-[0_0_30px_rgba(6,182,212,0.18)]'
+                        : 'bg-gradient-to-b from-[#081322] to-[#040914] border-slate-800/80 hover:border-slate-700'
                     }`}
                   >
                     {tier.popular && (
-                      <span className="absolute -top-2.5 right-4 px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 text-[10px] font-mono font-bold">
-                        RECOMMENDED
+                      <span className="absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+                        Most Requested
                       </span>
                     )}
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-slate-200">{tier.name}</span>
-                        <strong className="text-lg font-mono font-extrabold text-cyan-400">
-                          ₹{tier.amount}
-                        </strong>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-black text-slate-100">{tier.name}</h3>
+                        <span className="text-2xl font-black font-mono text-cyan-400">₹{tier.amount}</span>
                       </div>
 
-                      <p className="text-[11px] text-slate-400 leading-snug mb-3">{tier.desc}</p>
-                    </div>
+                      <p className="text-xs text-slate-400 leading-relaxed font-sans">{tier.desc}</p>
 
-                    <div className="space-y-1 border-t border-slate-800/80 pt-2 text-[10px] text-slate-300">
-                      {tier.features.map((f, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          <Check className="w-3 h-3 text-cyan-400 shrink-0" />
-                          <span>{f}</span>
-                        </div>
-                      ))}
+                      <div className="space-y-1.5 pt-3 text-xs text-slate-300 font-sans">
+                        {tier.features.map((feat, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>{feat}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 );
               })}
-            </div>
 
-            {/* QR Payment Box */}
-            <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-slate-800 text-center space-y-4">
-              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-300">
-                Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)
-              </h3>
-
-              {/* Dynamic QR Display */}
-              <div className="p-4 rounded-2xl bg-white text-slate-950 inline-block shadow-2xl mx-auto">
-                <div className="w-48 h-48 sm:w-56 sm:h-56 mx-auto flex flex-col items-center justify-center p-2 border-2 border-slate-900 rounded-xl">
-                  <svg viewBox="0 0 100 100" className="w-full h-full" fill="none">
-                    <rect x="5" y="5" width="26" height="26" rx="4" stroke="#040914" strokeWidth="4" />
-                    <rect x="11" y="11" width="14" height="14" rx="2" fill="#040914" />
-                    <rect x="69" y="5" width="26" height="26" rx="4" stroke="#040914" strokeWidth="4" />
-                    <rect x="75" y="11" width="14" height="14" rx="2" fill="#040914" />
-                    <rect x="5" y="69" width="26" height="26" rx="4" stroke="#040914" strokeWidth="4" />
-                    <rect x="11" y="75" width="14" height="14" rx="2" fill="#040914" />
-                    <rect x="36" y="8" width="6" height="6" fill="#040914" />
-                    <rect x="46" y="8" width="6" height="6" fill="#040914" />
-                    <rect x="56" y="8" width="6" height="6" fill="#040914" />
-                    <rect x="36" y="44" width="8" height="8" fill="#06b6d4" />
-                    <rect x="48" y="44" width="8" height="8" fill="#3b82f6" />
-                    <circle cx="50" cy="50" r="11" fill="#ffffff" stroke="#040914" strokeWidth="2" />
-                    <circle cx="50" cy="50" r="8" fill="#06b6d4" />
-                    <text x="50" y="53" textAnchor="middle" fill="#ffffff" fontSize="6" fontWeight="bold">N1</text>
-                  </svg>
-                </div>
-                <div className="mt-2 text-center">
-                  <p className="text-xs font-bold text-slate-900">NagrikOne Citizen Infrastructure</p>
-                  <p className="text-[10px] font-mono text-slate-500">Scan to Pay ₹{currentTier.amount}</p>
-                </div>
-              </div>
-
-              {/* Dynamic QR Expiry Timer */}
-              <div className="flex items-center justify-center gap-2 text-xs font-mono text-slate-400">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>QR Session valid for: <strong className="text-amber-400">{formatTimer(timerSeconds)}</strong></span>
-              </div>
-
-              {/* Verified VPA Copy */}
-              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-left">
-                <div>
-                  <span className="text-[10px] font-mono text-slate-400 block">OFFICIAL VERIFIED VPA</span>
-                  <strong className="text-xs font-mono text-cyan-300">{initPaymentData?.upiId || '8208583788@kotak811'}</strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyUpi}
-                  className="px-3 py-1.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 hover:bg-cyan-500/30"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Copied' : 'Copy VPA'}</span>
-                </button>
-              </div>
-
-              {/* Deep Link Intent */}
-              {initPaymentData?.upiDeepLink && (
-                <div className="pt-2">
-                  <a
-                    href={initPaymentData.upiDeepLink}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200 text-xs font-bold transition-colors"
-                  >
-                    <span>Open in UPI App</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right: Order Breakdown & Server-Side Verification Form */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="p-6 sm:p-8 rounded-3xl bg-[#081322] border border-slate-800 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-bold">
-                    ORDER BREAKDOWN
-                  </span>
-                  <h3 className="text-lg font-bold text-slate-100">Tax Invoice Summary</h3>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center font-bold text-xs font-mono">
-                  ₹
-                </div>
-              </div>
-
-              <div className="space-y-3 text-xs text-slate-300">
-                <div className="flex justify-between">
-                  <span>{currentTier.name}</span>
-                  <span className="font-mono text-slate-100">₹{(currentTier.amount * 0.847).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Statutory GST (18%)</span>
-                  <span className="font-mono">₹{(currentTier.amount * 0.153).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Official Portal Dispatch Fee</span>
-                  <span className="font-mono text-emerald-400">FREE</span>
-                </div>
-
-                <div className="border-t border-slate-800 pt-3 flex justify-between items-baseline text-slate-100">
-                  <span className="font-bold text-sm">Total Payable Amount:</span>
-                  <strong className="text-2xl font-extrabold text-cyan-400 font-mono">
-                    ₹{currentTier.amount}
-                  </strong>
-                </div>
-              </div>
-
-              {/* Verification Form (No fake instant success simulation) */}
-              <div className="pt-2 border-t border-slate-800 space-y-3">
-                <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-bold">
-                  Enter 12-Digit Bank UPI Reference / UTR Number:
+              {/* Optional Case ID Input */}
+              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">
+                  Link to Case Docket (Optional)
                 </label>
                 <input
                   type="text"
-                  value={upiRrnInput}
-                  onChange={(e) => setUpiRrnInput(e.target.value)}
-                  placeholder="e.g. 423891029481 (From transaction SMS/Receipt)"
-                  className="w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-slate-100 placeholder:text-slate-600 outline-none focus:border-cyan-400"
+                  value={caseId}
+                  onChange={(e) => setCaseId(e.target.value)}
+                  placeholder="e.g. CASE-1725700000-XYZ"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-200 outline-none focus:border-cyan-400 font-mono"
                 />
-
-                {verificationError && (
-                  <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>{verificationError}</span>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleVerifyPayment}
-                  disabled={verifying || !!verifiedPayment}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-60"
-                >
-                  {verifying ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                      <span>Verifying Bank Settlement...</span>
-                    </>
-                  ) : verifiedPayment ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-slate-950" />
-                      <span>Payment Confirmed & Verified</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 text-slate-950" />
-                      <span>Verify & Activate Pass (₹{currentTier.amount})</span>
-                    </>
-                  )}
-                </button>
               </div>
+            </div>
 
-              {/* Verified Confirmation Receipt */}
-              {verifiedPayment && (
-                <div className="p-4 rounded-2xl bg-emerald-950/70 border border-emerald-500/50 text-xs text-emerald-200 space-y-2 font-mono animate-fadeIn">
-                  <div className="flex items-center justify-between border-b border-emerald-500/30 pb-2">
-                    <span className="font-bold text-emerald-300">GST TAX INVOICE</span>
-                    <span className="bg-emerald-500 text-slate-950 px-2 py-0.5 rounded text-[10px] font-bold">PAID</span>
+            {/* Right Column: Secure NPCI UPI Payment QR & Verification */}
+            <div className="lg:col-span-6 space-y-6">
+              <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-cyan-500/30 shadow-2xl space-y-6">
+                
+                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block">PAYMENT SUMMARY</span>
+                    <h3 className="text-base font-black text-slate-100">{currentTier.name}</h3>
                   </div>
-                  <p>Ref: {verifiedPayment.refId}</p>
-                  <p>Pass: {verifiedPayment.tier}</p>
-                  <p>Amount: ₹{verifiedPayment.amount}</p>
-                  <p>Timestamp: {new Date().toLocaleString('en-IN')}</p>
+                  <div className="text-right">
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block">AMOUNT</span>
+                    <span className="text-2xl font-black font-mono text-emerald-400">₹{currentTier.amount}</span>
+                  </div>
+                </div>
 
-                  <div className="flex gap-2 pt-2">
+                {/* QR Code Container */}
+                <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
+                  {initPaymentData?.qrDataUrl ? (
+                    <div className="p-3 bg-white rounded-2xl shadow-md">
+                      <img
+                        src={initPaymentData.qrDataUrl}
+                        alt="NPCI UPI QR Code"
+                        className="w-48 h-48 object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-48 h-48 rounded-2xl bg-slate-950 flex items-center justify-center text-slate-600">
+                      <QrCode className="w-16 h-16 animate-pulse" />
+                    </div>
+                  )}
+
+                  <div className="text-center space-y-1">
+                    <span className="text-xs font-mono font-bold text-slate-200 block">
+                      Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-500 block">
+                      Verified NPCI Payee: <strong className="text-slate-300">{initPaymentData?.payeeVpa || 'merchant@upi'}</strong>
+                    </span>
+                  </div>
+
+                  {/* Copy UPI Intent Button */}
+                  {initPaymentData?.upiUri && (
                     <button
-                      type="button"
-                      onClick={handlePrintReceipt}
-                      className="flex-1 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold"
+                      onClick={handleCopyUPI}
+                      className="px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-slate-300 flex items-center gap-2 transition-colors"
                     >
-                      Print Receipt
+                      <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>{copied ? 'UPI Link Copied!' : 'Copy UPI Link'}</span>
                     </button>
-                    <Link
-                      href="/cases"
-                      className="flex-1 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-xs font-bold text-center"
+                  )}
+                </div>
+
+                {/* Verification Section */}
+                <div className="space-y-3 pt-2">
+                  <label className="text-xs font-mono text-slate-300 font-bold block">
+                    Confirm 12-digit UPI UTR / Transaction Reference (RRN)
+                  </label>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={upiRrnInput}
+                      onChange={(e) => setUpiRrnInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 425601982341"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:border-cyan-400 font-mono tracking-widest"
+                    />
+
+                    <button
+                      onClick={handleVerifyPayment}
+                      disabled={verifying}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs whitespace-nowrap transition-all disabled:opacity-50"
                     >
-                      Go to Cases
-                    </Link>
+                      {verifying ? 'Verifying...' : 'Verify'}
+                    </button>
+                  </div>
+
+                  {verificationError && (
+                    <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{verificationError}</span>
+                    </div>
+                  )}
+
+                  {/* Security Notice */}
+                  <div className="pt-2 flex items-start gap-2 text-[11px] text-slate-500 font-mono">
+                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                    <span>Never enter your UPI PIN or bank password on any website. Verification only checks your bank-issued 12-digit UTR.</span>
                   </div>
                 </div>
-              )}
 
-              {/* Guarantee */}
-              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span>100% Money-Back SLA Guarantee if statutory preparation fails.</span>
-                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
       </div>
-    </div>
+    </main>
   );
 }
 
 export default function PaymentPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen grid place-items-center bg-[#030712] text-slate-400 font-mono">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5 animate-spin text-cyan-400" />
-            <span>Loading NagrikOne Secure Gateway...</span>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="min-h-screen bg-[#030712] flex items-center justify-center text-xs font-mono text-slate-500">Loading Payment Gateway...</div>}>
       <PaymentContent />
     </Suspense>
   );

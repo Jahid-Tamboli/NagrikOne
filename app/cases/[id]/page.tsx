@@ -18,7 +18,10 @@ import {
   User,
   Activity,
   Zap,
-  HelpCircle
+  HelpCircle,
+  RotateCcw,
+  Sparkles,
+  CheckCircle
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import AuthModal from '@/components/AuthModal';
@@ -67,56 +70,45 @@ export default function CaseDetailPage() {
     init();
   }, [caseId]);
 
-  const handleVerifyResolution = async () => {
+  const handleOutcomeFeedback = async (outcomeType: 'RESOLVED' | 'PARTIAL' | 'NOT_RESOLVED') => {
     if (!caseId) return;
     setActionLoading(true);
-    try {
-      const res = await fetch(`/api/cases/${caseId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'STATUTORY_RESOLVED',
-          note: 'Citizen verified satisfactory resolution of the issue.'
-        })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to verify resolution.');
-      }
-      fetchCase();
-    } catch (err: any) {
-      setError(err.message || 'Error updating status.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+    setError(null);
 
-  const handleReopenCase = async () => {
-    if (!caseId) return;
-    setActionLoading(true);
+    let targetStatus = 'STATUTORY_RESOLVED';
+    let note = 'Citizen confirmed issue is satisfactorily resolved.';
+
+    if (outcomeType === 'PARTIAL') {
+      targetStatus = 'RESOLUTION_PENDING';
+      note = 'Citizen indicated issue is partially resolved. Case remains open for follow-up.';
+    } else if (outcomeType === 'NOT_RESOLVED') {
+      targetStatus = 'REOPENED';
+      note = 'Citizen indicated issue was NOT resolved. Case reopened for next escalation step.';
+    }
+
     try {
       const res = await fetch(`/api/cases/${caseId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: 'REOPENED',
-          note: 'Citizen requested review / reopened case due to recurring problem.'
+          status: targetStatus,
+          note: note
         })
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to reopen case.');
+        throw new Error(data.error || 'Failed to update outcome.');
       }
       fetchCase();
     } catch (err: any) {
-      setError(err.message || 'Error reopening case.');
+      setError(err.message || 'Error updating case outcome.');
     } finally {
       setActionLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950">
+    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950 pb-24">
       <Navbar
         user={user}
         onOpenAuth={() => setAuthModalOpen(true)}
@@ -148,146 +140,171 @@ export default function CaseDetailPage() {
 
           <button
             onClick={fetchCase}
-            className="p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white"
-            title="Refresh Timeline"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono hover:text-white transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Status</span>
           </button>
         </div>
 
-        {loading ? (
-          <div className="p-24 text-center text-slate-400 font-mono">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-cyan-400" />
-            <p className="text-xs">Loading case dossier & timeline...</p>
+        {error && (
+          <div className="mb-6 p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
-        ) : error || !caseData ? (
-          <div className="p-12 text-center rounded-3xl bg-slate-900/40 border border-slate-800 text-slate-400 max-w-md mx-auto space-y-4">
-            <AlertTriangle className="w-10 h-10 text-rose-400 mx-auto" />
-            <h3 className="text-lg font-bold text-slate-100">Unable to view case</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">{error || 'Case does not exist.'}</p>
+        )}
+
+        {loading && !caseData ? (
+          <div className="py-20 text-center space-y-3">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto text-cyan-400" />
+            <p className="text-xs font-mono text-slate-400">Loading case docket and statutory timelines...</p>
+          </div>
+        ) : !caseData ? (
+          <div className="py-20 text-center space-y-4">
+            <AlertTriangle className="w-8 h-8 mx-auto text-amber-400" />
+            <p className="text-sm text-slate-300">Case docket not found or access unauthorized.</p>
             <Link
               href="/cases"
-              className="inline-block px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-200"
+              className="inline-block px-5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 text-xs font-bold"
             >
               Back to Cases
             </Link>
           </div>
         ) : (
-          <div className="grid lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Case Information & Evidence */}
+          <div className="grid lg:grid-cols-12 gap-8">
+            {/* Left Column: Case Details & Outcome Feedback */}
             <div className="lg:col-span-7 space-y-6">
-              {/* Header Box */}
-              <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 space-y-4 shadow-xl">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono font-bold uppercase text-cyan-400 bg-cyan-950/80 px-2.5 py-1 rounded-md border border-cyan-500/30">
-                    {caseData.category}
-                  </span>
-                  <span className={`status-pill status-${caseData.status}`}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              
+              {/* Header Card */}
+              <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 shadow-xl space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                  <div>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest block">CASE DOCKET ID</span>
+                    <span className="text-sm font-mono font-black text-cyan-300">{caseData.id}</span>
+                  </div>
+
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider ${
+                      caseData.status === 'STATUTORY_RESOLVED' || caseData.status === 'CLOSED'
+                        ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300'
+                        : caseData.status === 'REOPENED'
+                        ? 'bg-purple-950/80 border border-purple-500/50 text-purple-300'
+                        : caseData.status === 'SLA_WARNING' || caseData.status === 'ESCALATION_RECOMMENDED'
+                        ? 'bg-rose-950/80 border border-rose-500/50 text-rose-300'
+                        : 'bg-cyan-950/80 border border-cyan-500/50 text-cyan-300'
+                    }`}
+                  >
                     {caseData.status}
                   </span>
                 </div>
 
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-50 tracking-tight">
-                  {caseData.title}
-                </h1>
-
-                <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300 leading-relaxed font-sans">
-                  {caseData.description || 'No statement provided.'}
+                <div className="space-y-2">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-50 leading-tight">
+                    {caseData.title}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+                    {caseData.description}
+                  </p>
                 </div>
 
-                {caseData.location && (
-                  <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                    <span className="text-cyan-400 font-bold">Location:</span>
-                    <span className="text-slate-200">{caseData.location}</span>
+                <div className="grid grid-cols-2 gap-4 pt-2 text-xs font-mono">
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block">Category / Domain</span>
+                    <strong className="text-slate-200 block truncate">{caseData.problemType?.category || 'General Citizen Issue'}</strong>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block">Jurisdiction</span>
+                    <strong className="text-slate-200 block truncate">{caseData.location || 'Unspecified Jurisdiction'}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* OUTCOME RESOLUTION FEEDBACK (SECTION 68 & 69) */}
+              <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-cyan-500/30 shadow-xl space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-slate-100 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-cyan-400" />
+                    <span>Outcome Resolution Feedback</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-sans">
+                    Did the authority or service provider solve your problem? Your response drives our resolution loop.
+                  </p>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                  <button
+                    onClick={() => handleOutcomeFeedback('RESOLVED')}
+                    disabled={actionLoading}
+                    className="p-3.5 rounded-2xl bg-emerald-950/40 hover:bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all"
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    <span>Yes, Resolved</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOutcomeFeedback('PARTIAL')}
+                    disabled={actionLoading}
+                    className="p-3.5 rounded-2xl bg-amber-950/40 hover:bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all"
+                  >
+                    <Clock className="w-5 h-5 text-amber-400" />
+                    <span>Partially Resolved</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOutcomeFeedback('NOT_RESOLVED')}
+                    disabled={actionLoading}
+                    className="p-3.5 rounded-2xl bg-rose-950/40 hover:bg-rose-950/80 border border-rose-500/40 text-rose-300 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all"
+                  >
+                    <RotateCcw className="w-5 h-5 text-rose-400" />
+                    <span>Not Resolved (Reopen)</span>
+                  </button>
+                </div>
+
+                {caseData.status === 'REOPENED' && (
+                  <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-500/40 text-xs text-purple-200 flex items-center justify-between gap-3">
+                    <div>
+                      <strong className="block font-bold">Case is currently Reopened</strong>
+                      <span className="text-purple-300 font-sans">NOVA can prepare an escalated dispute docket or legal notice.</span>
+                    </div>
+                    <Link
+                      href={`/nova?initial=${encodeURIComponent(`Case ${caseData.id} was not resolved. I need to escalate.`)}`}
+                      className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs whitespace-nowrap"
+                    >
+                      Consult NOVA
+                    </Link>
                   </div>
                 )}
               </div>
 
-              {/* Statutory Jurisdiction & Pathway */}
-              <div className="p-6 rounded-3xl bg-gradient-to-b from-[#061e1b] to-[#030e0c] border border-emerald-500/30 space-y-3">
-                <span className="text-[10.5px] font-mono uppercase tracking-widest text-emerald-400 font-bold block">
-                  STATUTORY ROUTING PATHWAY
-                </span>
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="text-base font-bold text-slate-100">
-                      {caseData.problem?.route || 'Official Department Review'}
-                    </h3>
-                    {caseData.problem?.legalAct && (
-                      <p className="text-xs text-emerald-300/90 mt-1 font-mono">
-                        Protected under: {caseData.problem.legalAct}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/* Evidence & Case Facts */}
+              <div className="rounded-3xl p-6 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 space-y-4">
+                <h3 className="text-sm font-black text-slate-200 uppercase font-mono tracking-wider">
+                  Verified Case Evidence ({caseData.evidence?.length || 0})
+                </h3>
 
-              {/* Evidence Inspector */}
-              {caseData.evidenceList && caseData.evidenceList.length > 0 && (
-                <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 space-y-3">
-                  <span className="text-[10.5px] font-mono uppercase tracking-widest text-slate-400 font-bold block">
-                    ATTACHED EVIDENCE ({caseData.evidenceList.length})
-                  </span>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {caseData.evidenceList.map((file: any) => (
-                      <div
-                        key={file.id}
-                        className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-3 text-xs"
-                      >
-                        <FileCheck className="w-5 h-5 text-cyan-400 shrink-0" />
-                        <div className="overflow-hidden">
-                          <strong className="text-slate-200 block truncate">{file.fileName}</strong>
-                          <span className="text-[10px] text-slate-500 font-mono">{file.ocrExtracted || 'Verified evidence'}</span>
+                {caseData.evidence && caseData.evidence.length > 0 ? (
+                  <div className="space-y-2">
+                    {caseData.evidence.map((ev: any, idx: number) => (
+                      <div key={ev.id || idx} className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <FileCheck className="w-4 h-4 text-emerald-400" />
+                          <span className="font-semibold text-slate-200">{ev.fileName}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">({Math.round((ev.fileSize || 0) / 1024)} KB)</span>
                         </div>
+                        <span className="text-[10px] text-emerald-400 font-mono uppercase">Verified</span>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* Citizen Actions */}
-              <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-100">Case Actions</h4>
-                  <p className="text-xs text-slate-400">Confirm resolution or request operational review.</p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {caseData.status !== 'STATUTORY_RESOLVED' && caseData.status !== 'CLOSED' ? (
-                    <button
-                      onClick={handleVerifyResolution}
-                      disabled={actionLoading}
-                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify Resolved</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleReopenCase}
-                      disabled={actionLoading}
-                      className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold"
-                    >
-                      Reopen Case
-                    </button>
-                  )}
-
-                  <Link
-                    href={`/payment?caseId=${caseData.id}`}
-                    className="px-4 py-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 font-semibold text-xs hover:bg-cyan-900/40 transition-colors flex items-center gap-1"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Fast-Track Pass</span>
-                  </Link>
-                </div>
+                ) : (
+                  <p className="text-xs text-slate-500 font-mono">No evidence files attached to this case.</p>
+                )}
               </div>
             </div>
 
             {/* Right Column: Real Event Timeline & SLA Status */}
             <div className="lg:col-span-5 space-y-6">
-              {/* SLA Target Card */}
+              
+              {/* Statutory SLA Target Card */}
               {caseData.sla && (
                 <div className="p-6 rounded-3xl bg-[#081322] border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">

@@ -20,13 +20,15 @@ interface AuthModalProps {
   onClose: () => void;
   onLoginSuccess: (user: AuthSession) => void;
   initialMessage?: string;
+  customPrompt?: string;
 }
 
 export default function AuthModal({
   isOpen,
   onClose,
   onLoginSuccess,
-  initialMessage
+  initialMessage,
+  customPrompt
 }: AuthModalProps) {
   const [step, setStep] = useState<'input' | 'otp'>('input');
   const [target, setTarget] = useState('');
@@ -164,7 +166,7 @@ export default function AuthModal({
         </h2>
 
         <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-          {initialMessage || (step === 'input'
+          {customPrompt || initialMessage || (step === 'input'
             ? 'Before we start, please log in so I can securely save your problem, documents and case status.'
             : `Enter the verification code sent to ${target}`)}
         </p>

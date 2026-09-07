@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-interface ServiceItem {
+export interface ServiceItem {
   id: string;
   badge?: string;
   title: string;
@@ -26,7 +26,7 @@ interface ServiceItem {
   categoryQuery: string;
 }
 
-const SERVICES: ServiceItem[] = [
+export const SERVICES: ServiceItem[] = [
   {
     id: 'civic',
     badge: 'High Impact',
@@ -88,16 +88,16 @@ const SERVICES: ServiceItem[] = [
     categoryQuery: 'Telecom & Broadband'
   },
   {
-    id: 'unknown',
+    id: 'anything-else',
     badge: 'Universal Intelligence',
-    title: 'Unknown Problems',
-    description: 'Disputes that do not fit into standard categories. NOVA understands your unique situation, structures the facts, and formulates an actionable roadmap.',
+    title: 'Anything Else',
+    description: 'Describe the problem in your own words. NOVA will understand it, ask the right questions and determine the next step.',
     icon: HelpCircle,
     gradient: 'from-purple-500/20 via-indigo-500/10 to-transparent',
     glowColor: 'rgba(168, 85, 247, 0.25)',
-    statutoryRoute: 'NagrikOne Custom Legal Triage',
-    turnaroundDays: 'Guided Review',
-    categoryQuery: 'All'
+    statutoryRoute: 'NagrikOne Custom Triage Engine',
+    turnaroundDays: 'Dynamic Intake',
+    categoryQuery: 'Unclassified'
   }
 ];
 
@@ -115,7 +115,7 @@ export default function ServiceCards3D({ onSelectService }: { onSelectService?: 
             key={service.id}
             onMouseEnter={() => setHoveredCard(service.id)}
             onMouseLeave={() => setHoveredCard(null)}
-            className="group relative rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 hover:border-cyan-500/50 transition-all duration-300 flex flex-col justify-between shadow-lg hover:shadow-[0_0_35px_rgba(6,182,212,0.18)]"
+            className="group relative rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800/80 hover:border-cyan-500/50 transition-all duration-300 flex flex-col justify-between shadow-lg hover:shadow-[0_0_35px_rgba(6,182,212,0.15)]"
           >
             {/* Ambient Background Glow */}
             <div
@@ -125,12 +125,12 @@ export default function ServiceCards3D({ onSelectService }: { onSelectService?: 
             <div>
               {/* Header Badge & 3D Glowing Icon Container */}
               <div className="flex items-center justify-between mb-6">
-                <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700/80 group-hover:border-cyan-400/60 flex items-center justify-center text-slate-100 shadow-inner group-hover:scale-105 transition-transform duration-300">
-                  <Icon className="w-7 h-7 text-cyan-400 group-hover:text-emerald-400 transition-colors" />
+                <div className="w-14 h-14 rounded-2xl bg-slate-900/90 border border-slate-700/80 group-hover:border-cyan-400/60 flex items-center justify-center text-slate-100 shadow-inner group-hover:scale-105 transition-transform duration-300">
+                  <Icon className="w-7 h-7 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                 </div>
 
                 {service.badge && (
-                  <span className="px-3 py-1 rounded-full text-[10.5px] font-mono font-bold uppercase tracking-wider bg-slate-900 border border-slate-700 text-slate-300 group-hover:text-white group-hover:border-slate-500">
+                  <span className="px-3 py-1 rounded-full text-[10.5px] font-mono font-bold uppercase tracking-wider bg-slate-900/80 border border-slate-700/80 text-slate-300 group-hover:text-white group-hover:border-cyan-500/40">
                     {service.badge}
                   </span>
                 )}
@@ -154,8 +154,8 @@ export default function ServiceCards3D({ onSelectService }: { onSelectService?: 
               </div>
 
               <Link
-                href="/nova"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 group-hover:border-cyan-400 text-slate-300 group-hover:text-cyan-300 transition-colors"
+                href={`/nova?category=${encodeURIComponent(service.id)}`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 group-hover:border-cyan-400 text-slate-300 group-hover:text-cyan-300 transition-colors font-sans font-semibold text-xs"
               >
                 <span>Talk to NOVA</span>
                 <ArrowRight className="w-3.5 h-3.5" />
