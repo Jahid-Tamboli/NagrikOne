@@ -1,28 +1,45 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { db, fallbackStore } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth/session';
+import QRCode from 'qrcode';
 
 // Server-controlled pricing matrix (Never trust client amount)
-export const TIER_PRICING: Record<string, { name: string; amount: number; desc: string }> = {
+const TIER_PRICING: Record<string, { name: string; amount: number; desc: string }> = {
+  ASSISTED_DRAFT: {
+    name: 'Assisted Document Drafting',
+    amount: 199,
+    desc: 'Expert compilation of your grievance dossier, structured evidence summary, and RTS submission template'
+  },
+  LEGAL_NOTICE: {
+    name: 'Formal Notice & Dispute Dossier',
+    amount: 499,
+    desc: 'Formal statutory notice draft with relevant legal citations, consumer protection clauses, and direct escalation pathway'
+  },
+  CONCIERGE: {
+    name: 'Dedicated Advisory Concierge',
+    amount: 999,
+    desc: 'End-to-end procedural support for high-stakes financial, property, or administrative disputes'
+  },
+  // Backward compatibility aliases
   STANDARD: {
-    name: 'Standard Citizen Filing',
-    amount: 49,
-    desc: 'Official statutory portal preparation & auto-drafted grievance dossier'
+    name: 'Assisted Document Drafting',
+    amount: 199,
+    desc: 'Expert compilation of your grievance dossier'
   },
   PRIORITY: {
-    name: 'Priority Fast-Track Pass',
+    name: 'Assisted Document Drafting',
     amount: 199,
-    desc: 'High-priority SLA monitoring + daily status updates + SMS escalation alerts'
+    desc: 'High-priority SLA monitoring'
   },
   LEGAL: {
-    name: 'Legal Notice & RTI Pass',
+    name: 'Formal Notice & Dispute Dossier',
     amount: 499,
-    desc: 'Formal legal notice drafting with legal citation + RTI First Appeal guide'
+    desc: 'Formal legal notice drafting'
   },
   VIP: {
-    name: 'VIP / High-Court Advisory',
+    name: 'Dedicated Advisory Concierge',
     amount: 999,
-    desc: 'Comprehensive legal concierge with panel advocate guidance'
+    desc: 'Comprehensive legal concierge'
   }
 };
 
@@ -31,18 +48,35 @@ export async function POST(req: Request) {
     const user = await getCurrentUser();
     const b = await req.json().catch(() => ({}));
     const caseId = b.caseId ? String(b.caseId).trim() : null;
-    const requestedTier = String(b.tier || 'PRIORITY').toUpperCase();
+    const requestedTier = String(b.tier || 'LEGAL_NOTICE').toUpperCase();
 
-    const tierInfo = TIER_PRICING[requestedTier] || TIER_PRICING.PRIORITY;
-    const amount = tierInfo.amount; // Enforce server-controlled pricing
+    const tierInfo = TIER_PRICING[requestedTier] || TIER_PRICING.LEGAL_NOTICE;
+    const amount = tierInfo.amount;
 
     const upiId = process.env.NAGRIKONE_UPI_ID || '8208583788@kotak811';
+    const payeeName = 'NagrikOne Citizen Services';
     const supportPhone = process.env.NAGRIKONE_SUPPORT || '+91 8208583788';
     const refId = `N1_TXN_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-    // Standard NPCI UPI URI scheme for deep linking into UPI apps
-    const encodedNote = encodeURIComponent(`NagrikOne ${tierInfo.name} Ref ${refId}`);
-    const upiDeepLink = `upi://pay?pa=${upiId}&pn=NagrikOne&am=${amount}&cu=INR&tn=${encodedNote}`;
+    // Standard NPCI UPI URI scheme for scannable QR and deep linking into UPI apps
+    const encodedNote = encodeURIComponent(`NagrikOne ${tierInfo.name}`);
+    const upiDeepLink = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amount}&cu=INR&tn=${encodedNote}`;
+
+    // Generate real, scannable QR Code as Data URL
+    let qrDataUrl = '';
+    try {
+      qrDataUrl = await QRCode.toDataURL(upiDeepLink, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      });
+    } catch (qrErr) {
+      console.warn('QR code generation error:', qrErr);
+      qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(upiDeepLink)}`;
+    }
 
     let paymentRecord: any = null;
 
@@ -80,11 +114,16 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       refId,
+      referenceId: refId,
       amount,
       tier: tierInfo,
       upiId,
+      payeeVpa: upiId,
+      payeeName,
       supportPhone,
       upiDeepLink,
+      upiUri: upiDeepLink,
+      qrDataUrl,
       instructions: 'Scan QR with any UPI app (GPay, PhonePe, Paytm, BHIM) or tap the direct payment link.'
     });
   } catch (err: any) {

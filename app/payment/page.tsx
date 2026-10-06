@@ -388,39 +388,60 @@ function PaymentContent() {
 
                 {/* QR Code Container */}
                 <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-4">
-                  {initPaymentData?.qrDataUrl ? (
-                    <div className="p-3 bg-white rounded-2xl shadow-md">
-                      <img
-                        src={initPaymentData.qrDataUrl}
-                        alt="NPCI UPI QR Code"
-                        className="w-48 h-48 object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-48 h-48 rounded-2xl bg-slate-950 flex items-center justify-center text-slate-600">
-                      <QrCode className="w-16 h-16 animate-pulse" />
-                    </div>
-                  )}
+                  <div className="p-3.5 bg-white rounded-2xl shadow-xl flex items-center justify-center border-2 border-cyan-500/40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={
+                        initPaymentData?.qrDataUrl ||
+                        `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(
+                          initPaymentData?.upiUri || `upi://pay?pa=8208583788@kotak811&pn=NagrikOne&am=${currentTier.amount}&cu=INR&tn=NagrikOne`
+                        )}`
+                      }
+                      alt="Scan to Pay via NPCI UPI"
+                      className="w-52 h-52 object-contain"
+                    />
+                  </div>
 
-                  <div className="text-center space-y-1">
-                    <span className="text-xs font-mono font-bold text-slate-200 block">
-                      Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)
+                  <div className="text-center space-y-1.5">
+                    <span className="text-xs font-mono font-bold text-slate-100 block">
+                      Scan with any UPI App to Pay ₹{currentTier.amount}
                     </span>
-                    <span className="text-[11px] font-mono text-slate-500 block">
-                      Verified NPCI Payee: <strong className="text-slate-300">{initPaymentData?.payeeVpa || 'merchant@upi'}</strong>
+                    <div className="flex items-center justify-center gap-1.5 pt-1">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950/80 border border-blue-500/40 text-blue-300 font-bold">GPay</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold">PhonePe</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-sky-950/80 border border-sky-500/40 text-sky-300 font-bold">Paytm</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">BHIM</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400 block pt-1">
+                      UPI ID: <strong className="text-cyan-300 font-bold">8208583788@kotak811</strong>
                     </span>
                   </div>
 
-                  {/* Copy UPI Intent Button */}
-                  {initPaymentData?.upiUri && (
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1 w-full">
+                    {/* Direct UPI App intent button */}
+                    {initPaymentData?.upiUri && (
+                      <a
+                        href={initPaymentData.upiUri}
+                        className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md hover:opacity-95"
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                        <span>Pay via UPI App</span>
+                      </a>
+                    )}
+
+                    {/* Copy UPI Intent Button */}
                     <button
-                      onClick={handleCopyUPI}
-                      className="px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-slate-300 flex items-center gap-2 transition-colors"
+                      onClick={() => {
+                        navigator.clipboard.writeText('8208583788@kotak811');
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="py-2 px-3 rounded-xl bg-slate-950 border border-slate-700 hover:border-cyan-400 text-xs font-mono text-slate-300 flex items-center gap-1.5 transition-colors"
                     >
                       <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>{copied ? 'UPI Link Copied!' : 'Copy UPI Link'}</span>
+                      <span>{copied ? 'UPI ID Copied!' : 'Copy UPI ID'}</span>
                     </button>
-                  )}
+                  </div>
                 </div>
 
                 {/* Verification Section */}

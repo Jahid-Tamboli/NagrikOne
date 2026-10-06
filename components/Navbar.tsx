@@ -133,13 +133,21 @@ export default function Navbar({
             )}
           </div>
         ) : (
-          <button
-            onClick={onOpenAuth}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-700 hover:border-cyan-500/40 bg-slate-900/80 text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-colors"
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>Citizen Sign In</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 hover:border-cyan-500/40 bg-slate-900/80 text-xs font-semibold text-slate-200 hover:text-cyan-300 transition-colors"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 text-xs font-bold shadow-sm hover:opacity-95 transition-all"
+            >
+              <span>Sign Up</span>
+            </button>
+          </div>
         )}
       </nav>
 
@@ -211,15 +219,26 @@ export default function Navbar({
               </div>
             </>
           ) : (
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenAuth();
-              }}
-              className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 font-semibold text-center"
-            >
-              Citizen Sign In
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth();
+                }}
+                className="w-full py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 font-semibold text-xs text-center"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAuth();
+                }}
+                className="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold text-xs text-center"
+              >
+                Sign Up
+              </button>
+            </div>
           )}
         </div>
       )}

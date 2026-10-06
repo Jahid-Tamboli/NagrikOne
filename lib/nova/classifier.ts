@@ -120,7 +120,7 @@ const DOMAIN_RULES: DomainRule[] = [
   {
     domainId: 'consumer-refund-denial',
     primaryCategory: 'Consumer & E-Commerce',
-    keywords: /\b(refund stuck|return picked up no refund|amazon refund|flipkart return|defective product|replacement denied|consumer court)\b/i,
+    keywords: /\b(refund stuck|return picked up no refund|amazon refund|flipkart return|defective product|replacement denied|consumer court|fake product|warranty denied|overcharging mrp|courier lost)\b/i,
     weight: 0.88,
     urgency: 'HIGH'
   },
@@ -128,15 +128,39 @@ const DOMAIN_RULES: DomainRule[] = [
   {
     domainId: 'police-tenant-landlord-extortion',
     primaryCategory: 'Police & Safety',
-    keywords: /\b(landlord|deposit not returned|rent deposit|security deposit|illegal eviction|cut electricity tenant|kirayedar|makan malik)\b/i,
+    keywords: /\b(landlord|deposit not returned|rent deposit|security deposit|illegal eviction|cut electricity tenant|kirayedar|makan malik|flat deposit|landlord extortion)\b/i,
     weight: 0.9,
     urgency: 'MEDIUM'
   },
-  // Government Certificates & Documents
+  // Healthcare & Insurance
   {
-    domainId: 'govt-certificate',
+    domainId: 'health-cashless-denial',
+    primaryCategory: 'Healthcare & Insurance',
+    keywords: /\b(cashless denied|tpa rejected|insurance claim rejected|hospital overcharging|mediclaim dispute|medical negligence|icu charges unreasonable)\b/i,
+    weight: 0.92,
+    urgency: 'HIGH'
+  },
+  // Labour & Employment
+  {
+    domainId: 'labour-unpaid-salary',
+    primaryCategory: 'Labour & Employment',
+    keywords: /\b(unpaid salary|salary delay|salary nahi mili|tankhwah|epfo withdrawal|pf rejected|illegal termination|gratuity unpaid|fnf delayed|full and final settlement)\b/i,
+    weight: 0.92,
+    urgency: 'HIGH'
+  },
+  // Education & Degree
+  {
+    domainId: 'edu-degree-withheld',
+    primaryCategory: 'Education & Colleges',
+    keywords: /\b(degree withheld|marksheet not given|original documents retained college|capitation fee|illegal fine college|ragging|bonafide denied)\b/i,
+    weight: 0.9,
+    urgency: 'HIGH'
+  },
+  // Government Certificates & Land
+  {
+    domainId: 'govt-aadhaar-update',
     primaryCategory: 'Govt Certificates & Land',
-    keywords: /\b(aadhaar correction|pan card stuck|passport delay|ration card|caste certificate|income certificate|sarkari portal error)\b/i,
+    keywords: /\b(aadhaar correction|aadhaar update|pan card stuck|passport delay|passport police verification|ration card|caste certificate|income certificate|sarkari portal error|land mutation|khata transfer|encumbrance certificate)\b/i,
     weight: 0.88,
     urgency: 'MEDIUM'
   },
@@ -144,11 +168,30 @@ const DOMAIN_RULES: DomainRule[] = [
   {
     domainId: 'telecom-network',
     primaryCategory: 'Telecom & Broadband',
-    keywords: /\b(broadband down|wifi not working|fiber cut|sim no signal|call drop|slow internet|jio fiber|airtel xstream)\b/i,
+    keywords: /\b(broadband down|wifi not working|fiber cut|sim no signal|call drop|slow internet|jio fiber|airtel xstream|porting dispute)\b/i,
+    weight: 0.88,
+    urgency: 'MEDIUM'
+  },
+  // Transport & RTO
+  {
+    domainId: 'transport-driving-licence',
+    primaryCategory: 'Transport, RTO & Railways',
+    keywords: /\b(driving licence|dl test delay|smart card rc|rto agent|fake challan|traffic police bribe|wrong e-challan|railway ticket refund|irctc refund)\b/i,
     weight: 0.88,
     urgency: 'MEDIUM'
   }
 ];
+
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'any', 'can', 'her', 'was',
+  'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now',
+  'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she',
+  'too', 'use', 'with', 'from', 'have', 'this', 'that', 'they', 'will', 'what', 'been',
+  'there', 'when', 'make', 'more', 'about', 'time', 'some', 'could', 'them', 'other',
+  'than', 'then', 'into', 'just', 'come', 'over', 'think', 'also', 'back', 'after',
+  'mera', 'meri', 'mere', 'karna', 'karo', 'raha', 'rahi', 'rahe', 'nahi', 'kuch', 'hoga',
+  'please', 'help', 'sir', 'madam', 'issue', 'problem', 'facing', 'complaint'
+]);
 
 /**
  * Classifies citizen's raw natural language problem description.
@@ -160,6 +203,7 @@ export function classifyCitizenIssue(text: string, customLocation?: string): Nov
   let highestScore = 0;
   let detectedUrgency: 'CRITICAL' | 'URGENT' | 'HIGH' | 'MEDIUM' = 'MEDIUM';
 
+  // Tier 1: Check specialized high-urgency domain rules
   for (const rule of DOMAIN_RULES) {
     const match = normalized.match(rule.keywords);
     if (match) {
@@ -172,22 +216,27 @@ export function classifyCitizenIssue(text: string, customLocation?: string): Nov
     }
   }
 
-  // Location extraction heuristic
+  // Location extraction heuristic: Detect Indian cities and street addresses
   let extractedLocation: string | undefined = customLocation;
   if (!extractedLocation) {
-    const locMatch = text.match(/(?:at|in|near|near to|behind|opposite|mein|ke paas|chowk|road|street|nagar|colony|sector|ward|society)\s+([A-Za-z0-9\s,\.-]{3,40})/i);
-    if (locMatch && locMatch[1]) {
+    const cityMatch = text.match(/\b(pune|mumbai|delhi|new delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|ahmedabad|surat|noida|gurgaon|gurugram|faridabad|ghaziabad|lucknow|kanpur|jaipur|bhopal|indore|patna|chandigarh|nagpur|nashik|thane|navi mumbai)\b/i);
+    const locMatch = text.match(/(?:at|in|near|near to|behind|opposite|mein|ke paas|chowk|road|street|nagar|colony|sector|ward|society|phase|area)\s+([A-Za-z0-9\s,\.-]{3,40})/i);
+    if (cityMatch && locMatch && locMatch[1]) {
+      extractedLocation = `${locMatch[1].trim()}, ${cityMatch[0].trim()}`;
+    } else if (locMatch && locMatch[1]) {
       extractedLocation = locMatch[1].trim();
+    } else if (cityMatch) {
+      extractedLocation = cityMatch[0].trim();
     }
   }
 
-  // Check for critical urgency triggers in tone
-  const isEmergency = /\b(emergency|urgent|critical|turant|threat|violence|beating|danger|suicide|immediate help)\b/i.test(normalized);
+  // Check for emergency / physical / financial duress triggers in tone
+  const isEmergency = /\b(emergency|urgent|critical|turant|threat|violence|beating|danger|suicide|immediate help|police help|extortion)\b/i.test(normalized);
   if (isEmergency) {
     detectedUrgency = 'CRITICAL';
   }
 
-  // If a known domain was matched with solid confidence
+  // If a known rule domain was matched with solid confidence
   if (bestDomainId && highestScore >= 0.7) {
     const problem = getProblemById(bestDomainId) || PROBLEM_TYPES[0];
     const confidence = Math.min(0.98, highestScore + (matchedKeywords.length * 0.03));
@@ -204,17 +253,93 @@ export function classifyCitizenIssue(text: string, customLocation?: string): Nov
     };
   }
 
+  // Tier 2: Universal semantic matching across all 100+ problem types in catalog
+  const words = normalized
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+
+  let bestProb: ProblemTypeDefinition | null = null;
+  let bestProbScore = 0;
+  const bestProbMatches: string[] = [];
+
+  for (const prob of PROBLEM_TYPES) {
+    let score = 0;
+    const localMatches: string[] = [];
+
+    // Check tags
+    for (const tag of prob.tags) {
+      const lowerTag = tag.toLowerCase();
+      if (normalized.includes(lowerTag)) {
+        score += 0.35 + (lowerTag.length > 6 ? 0.15 : 0);
+        localMatches.push(tag);
+      } else {
+        const tagWords = lowerTag.split(/\s+/);
+        for (const tw of tagWords) {
+          if (tw.length > 3 && words.includes(tw)) {
+            score += 0.15;
+            localMatches.push(tw);
+          }
+        }
+      }
+    }
+
+    // Check name tokens
+    const nameWords = prob.name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+
+    for (const nw of nameWords) {
+      if (words.includes(nw)) {
+        score += 0.2;
+        localMatches.push(nw);
+      }
+    }
+
+    // Check ID tokens
+    const idParts = prob.id.split('-');
+    for (const part of idParts) {
+      if (part.length > 3 && words.includes(part)) {
+        score += 0.25;
+        localMatches.push(part);
+      }
+    }
+
+    if (score > bestProbScore) {
+      bestProbScore = score;
+      bestProb = prob;
+      bestProbMatches.length = 0;
+      bestProbMatches.push(...Array.from(new Set(localMatches)));
+    }
+  }
+
+  if (bestProb && bestProbScore >= 0.35) {
+    const confidence = Math.min(0.96, 0.7 + bestProbScore * 0.08);
+    return {
+      problemId: bestProb.id,
+      problem: bestProb,
+      confidence,
+      matchedKeywords: bestProbMatches,
+      suggestedUrgency: isEmergency ? 'CRITICAL' : bestProb.priority,
+      extractedLocation,
+      isUnknown: false,
+      reasoning: `Identified statutory route "${bestProb.name}" under ${bestProb.category} based on matching criteria: ${bestProbMatches.join(', ')}.`
+    };
+  }
+
   // UNKNOWN PROBLEM HANDLING:
-  // When an issue doesn't fit standard catalog, we construct a structured Unclassified Problem
+  // When an issue doesn't fit standard catalog, construct a structured Unclassified Problem
   // without hallucinating fake government departments or rejecting the citizen.
   const unknownProblem: ProblemTypeDefinition = {
-    id: `unclassified_${Date.now()}`,
+    id: 'unclassified-citizen-issue',
     name: 'Unclassified Citizen Issue',
     category: 'Civic & Municipal',
     route: 'NagrikOne Guided Citizen Dossier Preparation & Statutory Review',
     priority: detectedUrgency,
     estimatedResolutionDays: 5,
-    legalAct: 'Article 21 (Right to Speedy Redressal) & Relevant Sectoral Consumer/Administrative Bylaws',
+    legalAct: 'Applicable sector-specific law or administrative framework to be determined after review.',
     escalationLevel: 'L1: NagrikOne Case Officer Review -> L2: Sectoral Nodal Agency Guidance',
     tags: ['unclassified', 'custom issue', 'advisory needed'],
     questions: [

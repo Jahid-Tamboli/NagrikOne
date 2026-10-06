@@ -16,18 +16,34 @@ export async function POST(req: Request) {
       );
     }
 
-    if (action === 'send') {
+    if (action === 'send' || action === 'request') {
       const result = await sendOtp(target);
       if (!result.success) {
+        const message =
+          result.message ||
+          'Unable to send OTP right now.';
+
+        const isCooldown =
+          typeof result.cooldownSeconds === 'number' &&
+          result.cooldownSeconds > 0;
+
         return NextResponse.json(
-          { error: result.message, cooldownSeconds: result.cooldownSeconds },
-          { status: 429 }
+          {
+            success: false,
+            error: message,
+            cooldownSeconds: result.cooldownSeconds
+          },
+          {
+            status: isCooldown ? 429 : 503
+          }
         );
       }
       return NextResponse.json({
         success: true,
         message: result.message,
-        cooldownSeconds: result.cooldownSeconds
+        cooldownSeconds: result.cooldownSeconds,
+        expirySeconds: result.expirySeconds,
+        devOtp: result.devOtp
       });
     }
 

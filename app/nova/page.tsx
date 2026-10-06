@@ -25,7 +25,10 @@ import {
   Volume2,
   VolumeX,
   Send,
-  Square
+  Square,
+  Copy,
+  FileText,
+  Check
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import AuthModal from '@/components/AuthModal';
@@ -48,6 +51,8 @@ interface DynamicQuestion {
 interface ConversationTurn {
   sender: 'citizen' | 'nova';
   text: string;
+  noticeDraft?: string;
+  headline?: string;
   timestamp: string;
 }
 
@@ -81,8 +86,16 @@ function NovaContent() {
   const [createdCase, setCreatedCase] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const [copiedTurnIdx, setCopiedTurnIdx] = useState<number | null>(null);
+  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+
   const audioAnalyzerRef = useRef<MicAudioAnalyzer | null>(null);
   const animFrameRef = useRef<number | null>(null);
+
+  // Auto-scroll transcript feed
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversation]);
 
   // Check current user session
   useEffect(() => {
@@ -223,17 +236,21 @@ function NovaContent() {
   };
 
   const runTriage = async (textToAnalyze: string) => {
-    if (!textToAnalyze.trim()) {
+    const rawText = (textToAnalyze || inputProblem || '').trim();
+    if (!rawText) {
       setErrorMessage('Please provide a description of the issue first.');
       return;
     }
+
+    // Immediately clear the issue input box upon clicking Analyze
+    setInputProblem('');
 
     // Add citizen turn to transcript
     setConversation(prev => [
       ...prev,
       {
         sender: 'citizen',
-        text: textToAnalyze,
+        text: rawText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -247,8 +264,9 @@ function NovaContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: textToAnalyze,
-          location: customLocation || undefined
+          text: rawText,
+          location: customLocation || undefined,
+          history: conversation.map((c) => ({ sender: c.sender, text: c.text }))
         })
       });
 
@@ -258,24 +276,52 @@ function NovaContent() {
         throw new Error(data.error || 'Failed to analyze issue.');
       }
 
-      setNovaState('CLASSIFYING');
-      setAnalysisResult(data);
+      const classification = data.classification || {};
+      const route = data.route || {};
+      const solution = data.solution || {};
+      const questions =
+        data.questions ||
+        data.dynamicQuestions ||
+        [];
 
-      const spokenResponse = data.classification.summary 
-        ? `${data.classification.summary}. I've identified the statutory route as ${data.route.targetDepartment || 'the relevant authority'}. Let's review the required details.`
-        : `I understand. I have mapped this to ${data.classification.domain} under ${data.route.statutoryFramework || 'applicable frameworks'}.`;
+      const fullSolutionText =
+        data.chatResponse ||
+        solution.chatResponseText ||
+        (classification.summary
+          ? `${classification.summary} I've identified the relevant route as ${
+              route.targetDepartment || 'the relevant service or authority'
+            }.`
+          : `I understand. I've mapped this issue to ${
+              classification.domain || 'a citizen-support category'
+            }.`);
+
+      const spokenSummary = classification.summary
+        ? `${classification.summary} I've prepared your legal action plan and statutory notice draft.`
+        : `I've analyzed your situation and prepared an immediate legal solution.`;
+
+      setNovaState('CLASSIFYING');
+      setAnalysisResult({
+        ...data,
+        rawText,
+        classification,
+        route,
+        questions,
+        solution
+      });
 
       setConversation(prev => [
         ...prev,
         {
           sender: 'nova',
-          text: spokenResponse,
+          text: fullSolutionText,
+          noticeDraft: solution.formalNoticeDraft,
+          headline: solution.headline,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
 
       if (voiceEnabled) {
-        speakText(spokenResponse);
+        speakText(spokenSummary);
       } else {
         setTimeout(() => setNovaState('IDLE'), 1800);
       }
@@ -332,19 +378,24 @@ function NovaContent() {
     setNovaState('THINKING');
 
     try {
+      const classification = analysisResult.classification || {};
+      const route = analysisResult.route || {};
+      const isUnknown = classification.isUnknown || classification.domain === 'UNKNOWN' || classification.domain === 'Unclassified / General Citizen Dispute';
+
+      const problemText = (analysisResult.rawText || inputProblem || 'Citizen issue').trim();
       const res = await fetch('/api/cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          problemTypeId: analysisResult.classification.domain === 'UNKNOWN' ? undefined : analysisResult.classification.problemCode,
-          title: analysisResult.classification.domain === 'UNKNOWN' 
-            ? `Dispute: ${inputProblem.slice(0, 50)}...`
-            : `${analysisResult.classification.domain} Issue`,
-          description: inputProblem,
+          problemTypeId: isUnknown ? undefined : (classification.problemCode || classification.problemId || analysisResult.problem?.id),
+          title: isUnknown 
+            ? `Dispute: ${problemText.slice(0, 50)}...`
+            : `${classification.domain || 'Citizen'} Issue`,
+          description: problemText,
           location: customLocation || 'Unspecified Jurisdiction',
           customAnswers: dynamicAnswers,
           evidenceFiles: evidenceFiles,
-          routeRecommendation: analysisResult.route
+          routeRecommendation: route
         })
       });
 
@@ -458,7 +509,7 @@ function NovaContent() {
         <div className="rounded-3xl p-5 sm:p-7 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800/80 shadow-2xl space-y-6 mb-8">
           
           {/* Transcript Feed */}
-          <div className="space-y-3.5 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-4 min-h-[220px] max-h-[560px] overflow-y-auto pr-2 custom-scrollbar">
             {conversation.map((turn, idx) => (
               <div
                 key={idx}
@@ -467,19 +518,61 @@ function NovaContent() {
                 }`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl p-3.5 leading-relaxed font-sans ${
+                  className={`max-w-[92%] sm:max-w-[85%] rounded-2xl p-4 leading-relaxed font-sans ${
                     turn.sender === 'citizen'
                       ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-slate-950 font-semibold'
-                      : 'bg-slate-900/90 border border-slate-800 text-slate-200 shadow-sm'
+                      : 'bg-slate-900/95 border border-slate-800 text-slate-200 shadow-lg'
                   }`}
                 >
-                  <p>{turn.text}</p>
-                  <span className="text-[10px] opacity-60 block mt-1 text-right font-mono">
+                  {turn.headline && (
+                    <div className="mb-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+                        {turn.headline}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="whitespace-pre-wrap leading-relaxed space-y-2 text-xs sm:text-sm text-slate-200 font-sans">
+                    {turn.text}
+                  </div>
+
+                  {turn.noticeDraft && (
+                    <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 font-bold">
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Statutory Legal Notice Ready</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(turn.noticeDraft!);
+                          setCopiedTurnIdx(idx);
+                          setTimeout(() => setCopiedTurnIdx(null), 2500);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 font-mono text-xs flex items-center gap-1.5 transition-all shadow-sm"
+                      >
+                        {copiedTurnIdx === idx ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Notice Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copy Legal Notice</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  <span className="text-[10px] opacity-60 block mt-2 text-right font-mono">
                     {turn.timestamp}
                   </span>
                 </div>
               </div>
             ))}
+            <div ref={transcriptEndRef} />
           </div>
 
           {/* Interactive Input Form */}
@@ -546,16 +639,16 @@ function NovaContent() {
               <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold">
-                    {analysisResult.classification.domain}
+                    {analysisResult.classification?.domain || 'General Citizen Issue'}
                   </span>
                   <span className="text-xs font-mono text-slate-400">
-                    Confidence: {Math.round(analysisResult.classification.confidence * 100)}%
+                    Confidence: {Math.round((analysisResult.classification?.confidence || 0.8) * 100)}%
                   </span>
                 </div>
 
                 <div className="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
                   <Clock3 className="w-4 h-4" />
-                  <span>Statutory SLA: {analysisResult.route.estimatedSlaDays} Days</span>
+                  <span>Statutory SLA: {analysisResult.route?.estimatedSlaDays || 5} Days</span>
                 </div>
               </div>
 
@@ -565,7 +658,7 @@ function NovaContent() {
                   Recommended Statutory Path
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
-                  {analysisResult.route.actionPlan}
+                  {analysisResult.route?.actionPlan || 'Review the case details and follow statutory procedures.'}
                 </p>
               </div>
 
@@ -573,20 +666,20 @@ function NovaContent() {
               <div className="grid sm:grid-cols-2 gap-4 pt-2">
                 <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1.5">
                   <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider block">Target Authority</span>
-                  <strong className="text-sm text-cyan-300 font-bold block">{analysisResult.route.targetDepartment}</strong>
-                  <span className="text-xs text-slate-400 block">{analysisResult.route.statutoryFramework}</span>
+                  <strong className="text-sm text-cyan-300 font-bold block">{analysisResult.route?.targetDepartment || 'Relevant Authority'}</strong>
+                  <span className="text-xs text-slate-400 block">{analysisResult.route?.statutoryFramework || 'Citizen Charter / Statutory Rules'}</span>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1.5">
                   <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider block">Next Immediate Step</span>
-                  <strong className="text-sm text-emerald-300 font-bold block">{analysisResult.route.nextImmediateStep}</strong>
-                  <span className="text-xs text-slate-400 block">{analysisResult.route.legalNoticeRecommended ? 'Legal Notice / Formal Dispute Recommended' : 'Direct RTS Submission Available'}</span>
+                  <strong className="text-sm text-emerald-300 font-bold block">{analysisResult.route?.nextImmediateStep || 'Prepare required documentation'}</strong>
+                  <span className="text-xs text-slate-400 block">{analysisResult.route?.legalNoticeRecommended ? 'Legal Notice / Formal Dispute Recommended' : 'Direct Statutory Submission Available'}</span>
                 </div>
               </div>
             </div>
 
             {/* Dynamic Contextual Questions */}
-            {analysisResult.questions && analysisResult.questions.length > 0 && (
+            {((analysisResult.questions || []).length > 0) && (
               <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#081322] to-[#040914] border border-slate-800 space-y-6">
                 <div className="space-y-1">
                   <h3 className="text-lg font-black text-slate-100 flex items-center gap-2">
@@ -599,7 +692,7 @@ function NovaContent() {
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {analysisResult.questions.map((q: DynamicQuestion) => (
+                  {(analysisResult.questions || []).map((q: DynamicQuestion) => (
                     <div key={q.id} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
                       <label className="text-xs font-bold text-slate-200 block">
                         {q.question} {q.required && <span className="text-rose-400">*</span>}
@@ -779,11 +872,13 @@ function NovaContent() {
 
 export default function NovaPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[#030712] flex items-center justify-center text-xs font-mono text-cyan-400">
-        Loading NOVA Intelligence...
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#030712] flex items-center justify-center text-xs font-mono text-cyan-400">
+          Loading NOVA Intelligence...
+        </div>
+      }
+    >
       <NovaContent />
     </Suspense>
   );

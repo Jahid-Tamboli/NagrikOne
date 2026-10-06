@@ -1,3 +1,5 @@
+import { getProblemById } from '@/lib/problemTypes';
+
 export interface DynamicQuestion {
   id: string;
   question: string;
@@ -15,7 +17,12 @@ export function getDynamicQuestions(problemId: string, description: string): Dyn
   const norm = (description || '').toLowerCase();
 
   // 1. Streetlight
-  if (problemId.includes('streetlight') || norm.includes('street light') || norm.includes('pole')) {
+  if (
+    problemId.includes('streetlight') ||
+    norm.includes('street light') ||
+    norm.includes('streetlight') ||
+    norm.includes('street lamp')
+  ) {
     return [
       {
         id: 'q_location',
@@ -50,7 +57,13 @@ export function getDynamicQuestions(problemId: string, description: string): Dyn
   }
 
   // 2. Road Pothole
-  if (problemId.includes('pothole') || norm.includes('road') || norm.includes('khadda')) {
+  if (
+    problemId.includes('pothole') ||
+    norm.includes('pothole') ||
+    norm.includes('khadda') ||
+    norm.includes('road damage') ||
+    norm.includes('broken road')
+  ) {
     return [
       {
         id: 'q_pothole_location',
@@ -177,6 +190,21 @@ export function getDynamicQuestions(problemId: string, description: string): Dyn
         required: true
       }
     ];
+  }
+
+  // Check if problemId matches any registered catalog problem with predefined questions
+  const matchedProblem = getProblemById(problemId);
+  if (matchedProblem && matchedProblem.questions && matchedProblem.questions.length > 0) {
+    return matchedProblem.questions.map((q, idx) => ({
+      id: `q_statutory_${idx + 1}`,
+      question: q,
+      type: 'text',
+      placeholder: 'Enter details...',
+      required: idx === 0,
+      helpText: matchedProblem.evidence?.[idx]
+        ? `Evidence required: ${matchedProblem.evidence[idx]}`
+        : undefined
+    }));
   }
 
   // Default / Unknown Problem Questions
