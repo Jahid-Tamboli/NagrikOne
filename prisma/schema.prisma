@@ -73,6 +73,7 @@ model User {
   name          String?
   email         String?        @unique
   phone         String?        @unique
+  passwordHash  String?        // PBKDF2 salt:hash — null for OTP-only accounts
   role          Role           @default(CITIZEN)
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())

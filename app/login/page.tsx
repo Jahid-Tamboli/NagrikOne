@@ -1,109 +1,214 @@
-﻿'use client';
+'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Sparkles,
-  User,
-  Phone,
   Mail,
+  Phone,
   Lock,
+  User,
   ArrowRight,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
-  KeyRound,
+  Eye,
+  EyeOff,
   ShieldCheck,
-  ArrowLeft
+  Sparkles,
+  ArrowLeft,
+  Building2,
+  Scale,
+  Zap,
+  Activity
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
-import { AuthSession } from '@/lib/auth/session';
+
+// ─── Animated 3D civic network visual (CSS-only, no Three.js) ───────────────
+
+function CivicNetworkVisual() {
+  return (
+    <div className="relative w-full h-full flex items-center justify-center select-none" aria-hidden="true">
+      {/* Ambient glow orbs */}
+      <div className="absolute w-64 h-64 rounded-full civic-orb-primary pointer-events-none" />
+      <div className="absolute w-48 h-48 rounded-full civic-orb-secondary pointer-events-none" style={{ top: '15%', left: '15%' }} />
+      <div className="absolute w-32 h-32 rounded-full civic-orb-tertiary pointer-events-none" style={{ bottom: '20%', right: '10%' }} />
+
+      {/* Central hub */}
+      <div className="relative z-10 flex flex-col items-center">
+        {/* Main animated core ring */}
+        <div className="relative w-36 h-36 sm:w-44 sm:h-44">
+          {/* Outer rotating ring */}
+          <div className="absolute inset-0 rounded-full civic-ring-outer" />
+          {/* Middle pulse ring */}
+          <div className="absolute inset-4 rounded-full civic-ring-middle" />
+          {/* Inner glow */}
+          <div className="absolute inset-8 rounded-full civic-ring-inner" />
+          {/* Center logo */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl"
+              style={{ background: 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)', color: '#021a1a', boxShadow: '0 0 30px rgba(16,185,129,0.5)' }}>
+              N1
+            </div>
+          </div>
+        </div>
+
+        {/* Floating service node chips */}
+        <div className="absolute top-0 -right-4 sm:-right-8 civic-float-1">
+          <div className="civic-node-chip">
+            <Building2 className="w-3 h-3 text-cyan-400" />
+            <span>Municipal</span>
+          </div>
+        </div>
+        <div className="absolute top-0 -left-4 sm:-left-8 civic-float-2">
+          <div className="civic-node-chip">
+            <Scale className="w-3 h-3 text-purple-400" />
+            <span>Consumer</span>
+          </div>
+        </div>
+        <div className="absolute bottom-2 -right-4 sm:-right-10 civic-float-3">
+          <div className="civic-node-chip">
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>Utility</span>
+          </div>
+        </div>
+        <div className="absolute bottom-2 -left-4 sm:-left-10 civic-float-4">
+          <div className="civic-node-chip">
+            <Activity className="w-3 h-3 text-emerald-400" />
+            <span>Banking</span>
+          </div>
+        </div>
+
+        {/* Connecting lines SVG */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-30" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="60" fill="none" stroke="rgba(6,182,212,0.4)" strokeWidth="0.5" strokeDasharray="4 6" className="civic-dash-rotate" />
+          <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(168,85,247,0.25)" strokeWidth="0.5" strokeDasharray="6 8" className="civic-dash-rotate-reverse" />
+        </svg>
+      </div>
+
+      {/* Tagline */}
+      <div className="absolute bottom-4 sm:bottom-8 left-0 right-0 text-center space-y-1">
+        <p className="text-xs font-mono text-cyan-400 uppercase tracking-widest">One Platform</p>
+        <p className="text-sm sm:text-base font-black text-slate-200 tracking-tight">Every Citizen Problem</p>
+        <p className="text-[11px] text-slate-500 font-sans max-w-xs mx-auto">
+          AI-powered resolution for municipal, banking, consumer, and civic disputes.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Field wrapper component ─────────────────────────────────────────────────
+
+interface FieldProps {
+  label: string;
+  required?: boolean;
+  optional?: boolean;
+  children: React.ReactNode;
+}
+
+function Field({ label, required, optional, children }: FieldProps) {
+  return (
+    <div>
+      <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+        {label}
+        {required && <span className="text-rose-400 ml-1">*</span>}
+        {optional && <span className="text-slate-600 ml-1 font-normal normal-case">(optional)</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+// ─── The actual page content ─────────────────────────────────────────────────
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get('redirect') || '/nova';
+  const defaultTabParam = searchParams.get('tab') as 'signin' | 'signup' | null;
 
-  const [tab, setTab] = useState<'signin' | 'signup' | 'otp_request' | 'otp_verify'>('signin');
-  const [name, setName] = useState('');
+  const [tab, setTab] = useState<'signin' | 'signup'>(defaultTabParam === 'signup' ? 'signup' : 'signin');
+
+  // Sign In fields
   const [identifier, setIdentifier] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // Sign Up fields
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // Shared
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(30);
-  const [expiryCountdown, setExpiryCountdown] = useState(180);
-  const [savedUser, setSavedUser] = useState<{ name?: string; identifier?: string; phone?: string; email?: string } | null>(null);
+  const [savedUser, setSavedUser] = useState<{ name?: string } | null>(null);
 
-  // Load remembered citizen details
   useEffect(() => {
     try {
       const saved = localStorage.getItem('nagrikone_saved_citizen');
       if (saved) {
         const parsed = JSON.parse(saved);
         setSavedUser(parsed);
-        if (parsed.identifier || parsed.phone || parsed.email) {
-          setIdentifier(parsed.identifier || parsed.phone || parsed.email || '');
-          setPhone(parsed.phone || '');
-          setEmail(parsed.email || '');
-          if (parsed.name) setName(parsed.name);
+        if (parsed.identifier || parsed.email) {
+          setIdentifier(parsed.identifier || parsed.email || '');
         }
       }
     } catch (e) {}
   }, []);
-
-  // OTP countdown timer
-  useEffect(() => {
-    let timer: any;
-    if (tab === 'otp_verify') {
-      timer = setInterval(() => {
-        setCooldown((prev) => Math.max(0, prev - 1));
-        setExpiryCountdown((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [tab]);
 
   const saveRememberedCitizen = (userData: any) => {
     if (!rememberMe) return;
     try {
       localStorage.setItem('nagrikone_saved_citizen', JSON.stringify({
         name: userData.name,
-        phone: userData.phone,
         email: userData.email,
-        identifier: userData.phone || userData.email,
+        phone: userData.phone,
+        identifier: userData.email || userData.phone,
         savedAt: new Date().toISOString()
       }));
     } catch (e) {}
   };
 
-  const handlePasswordLogin = async (e: React.FormEvent) => {
+  // Password strength
+  const getPasswordStrength = (pwd: string) => {
+    if (!pwd) return null;
+    const score = [pwd.length >= 8, /[A-Z]/.test(pwd), /[a-z]/.test(pwd), /\d/.test(pwd), /[^A-Za-z0-9]/.test(pwd)].filter(Boolean).length;
+    if (score <= 2) return { label: 'Weak', color: 'bg-rose-500', width: '33%' };
+    if (score <= 3) return { label: 'Fair', color: 'bg-amber-500', width: '60%' };
+    return { label: 'Strong', color: 'bg-emerald-500', width: '100%' };
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!identifier.trim() || !password) {
+      setError('Please enter your email/mobile and password.');
+      return;
+    }
     setLoading(true);
-
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: identifier.trim(), password })
       });
-
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Invalid credentials. Please check your password.');
       }
-
       saveRememberedCitizen(data.user);
       window.location.href = redirectUrl;
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your password.');
+      setError(err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -112,27 +217,31 @@ function LoginContent() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    if (!name.trim() || name.trim().length < 2) { setError('Please enter your full name.'); return; }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('Please enter a valid email address.'); return; }
+    if (phone && !/^[6-9]\d{9}$/.test(phone.replace(/\D/g, ''))) { setError('Please enter a valid 10-digit mobile number, or leave it blank.'); return; }
+    if (!signupPassword || signupPassword.length < 8) { setError('Password must be at least 8 characters long.'); return; }
+    if (signupPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
+    if (!termsAccepted) { setError('Please accept the Terms of Service and Privacy Policy.'); return; }
 
+    setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          password
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          password: signupPassword,
+          confirmPassword
         })
       });
-
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Registration failed.');
-      }
-
+      if (!res.ok || !data.success) throw new Error(data.error || 'Registration failed.');
       saveRememberedCitizen(data.user);
-      window.location.href = redirectUrl;
+      setSuccessMsg(`Welcome, ${data.user.name}! Redirecting…`);
+      setTimeout(() => { window.location.href = redirectUrl; }, 1000);
     } catch (err: any) {
       setError(err.message || 'Could not complete registration.');
     } finally {
@@ -140,490 +249,359 @@ function LoginContent() {
     }
   };
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const target = (phone || identifier).trim();
-
-    if (!target) {
-      setError('Please enter your 10-digit mobile number.');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', target })
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Unable to send OTP right now.');
-      }
-
-      setTab('otp_verify');
-      setCooldown(data.cooldownSeconds || 30);
-      setExpiryCountdown(data.expirySeconds || 180);
-      setSuccessMsg(`A 6-digit verification code has been dispatched to ${target}.`);
-    } catch (err: any) {
-      setError(err.message || 'Unable to send OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOtpChange = (index: number, val: string) => {
-    const digitsOnly = val.replace(/\D/g, '');
-    if (digitsOnly.length > 1) {
-      const newOtp = [...otp];
-      for (let i = 0; i < 6 && i < digitsOnly.length; i++) {
-        newOtp[i] = digitsOnly[i];
-      }
-      setOtp(newOtp);
-      const lastIdx = Math.min(5, digitsOnly.length - 1);
-      document.getElementById(`login-otp-${lastIdx}`)?.focus();
-      return;
-    }
-
-    if (!/^\d*$/.test(val)) return;
-    const newOtp = [...otp];
-    newOtp[index] = val.slice(-1);
-    setOtp(newOtp);
-
-    if (val && index < 5) {
-      document.getElementById(`login-otp-${index + 1}`)?.focus();
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const code = otp.join('');
-    const target = (phone || identifier).trim();
-
-    if (code.length < 6) {
-      setError('Please enter the full 6-digit verification code.');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'verify',
-          target,
-          code,
-          name: name.trim() || undefined
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid OTP. Please check the code.');
-      }
-
-      saveRememberedCitizen(data.user);
-      window.location.href = redirectUrl;
-    } catch (err: any) {
-      setError(err.message || 'Invalid OTP. Please check the code.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pwStrength = getPasswordStrength(signupPassword);
 
   return (
-    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950 pb-20">
-      <Navbar onOpenAuth={() => {}} onLogout={() => {}} />
+    <main className="min-h-screen bg-[#030712] text-slate-100 selection:bg-cyan-500 selection:text-slate-950 overflow-hidden relative">
+      {/* Background ambient orbs */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full opacity-40 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.12), transparent 70%)' }} />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.12), transparent 70%)' }} />
+        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] rounded-full opacity-20 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.1), transparent 70%)' }} />
+      </div>
 
-      <div className="container-box pt-8 sm:pt-14 max-w-lg">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-xs font-mono text-slate-400 hover:text-cyan-400 mb-6 transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Return to Homepage</span>
-        </Link>
+      <div className="relative z-10">
+        <Navbar onOpenAuth={() => {}} onLogout={() => {}} />
 
-        <div className="rounded-3xl p-6 sm:p-9 bg-gradient-to-b from-[#081322] via-[#040914] to-[#020408] border border-cyan-500/30 shadow-[0_0_60px_rgba(6,182,212,0.2)]">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 font-extrabold text-sm">
-              N1
+        <div className="min-h-[calc(100vh-76px)] grid lg:grid-cols-2">
+
+          {/* ─── Left column: animated civic visual ─── */}
+          <div className="hidden lg:flex flex-col items-center justify-center p-12 xl:p-16 relative">
+            {/* Back to homepage */}
+            <Link
+              href="/"
+              className="absolute top-6 left-8 inline-flex items-center gap-1.5 text-xs font-mono text-slate-500 hover:text-cyan-400 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to Home
+            </Link>
+
+            <div className="w-full max-w-sm xl:max-w-md aspect-square">
+              <CivicNetworkVisual />
             </div>
-            <span className="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase">
-              Citizen Security Gateway
-            </span>
+
+            {/* Trust badges */}
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              {[
+                { icon: ShieldCheck, label: 'PBKDF2 Encrypted', color: 'text-cyan-400' },
+                { icon: Sparkles, label: 'NOVA AI-Powered', color: 'text-purple-400' },
+                { icon: CheckCircle2, label: 'Real Statutory Routes', color: 'text-emerald-400' }
+              ].map(({ icon: Icon, label, color }) => (
+                <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <Icon className={`w-3.5 h-3.5 ${color}`} />
+                  <span className="text-slate-400">{label}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Tab Selector */}
-          {tab !== 'otp_verify' && (
-            <div className="flex p-1 rounded-2xl bg-slate-900/80 border border-slate-800 mb-6">
-              <button
-                type="button"
-                onClick={() => { setTab('signin'); setError(null); }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  tab === 'signin'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTab('signup'); setError(null); }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  tab === 'signup'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Create Account
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTab('otp_request'); setError(null); }}
-                className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all ${
-                  tab === 'otp_request'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                SMS OTP
-              </button>
-            </div>
-          )}
+          {/* ─── Right column: auth form ─── */}
+          <div className="flex items-center justify-center p-6 sm:p-10 lg:p-12">
+            <div className="w-full max-w-md">
+              {/* Mobile back link */}
+              <Link href="/" className="lg:hidden inline-flex items-center gap-1.5 text-xs font-mono text-slate-500 hover:text-cyan-400 mb-6 transition-colors">
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to Home
+              </Link>
 
-          <h1 className="text-2xl font-black text-slate-50 mb-1">
-            {tab === 'signin' && (savedUser?.name ? `Welcome back, ${savedUser.name.split(' ')[0]}` : 'Citizen Sign In')}
-            {tab === 'signup' && 'Register New Citizen Profile'}
-            {tab === 'otp_request' && 'Login with Mobile OTP'}
-            {tab === 'otp_verify' && 'Verify 6-Digit SMS Code'}
-          </h1>
-
-          <p className="text-xs text-slate-400 mb-6 font-sans">
-            {tab === 'signin'
-              ? 'Enter your registered mobile or email and your password to access your cases.'
-              : tab === 'signup'
-              ? 'Enter your details once. We remember you securely with one password.'
-              : tab === 'otp_request'
-              ? 'We will dispatch a secure 6-digit verification code to your phone.'
-              : `Enter the code dispatched to ${phone || identifier}`}
-          </p>
-
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="mb-4 p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {/* SIGN IN */}
-          {tab === 'signin' && (
-            <form onSubmit={handlePasswordLogin} className="space-y-4">
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  Mobile Number or Email *
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <User className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="e.g. 9503795786 or citizen@example.com"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
+              {/* Mobile brand header */}
+              <div className="lg:hidden flex items-center gap-3 mb-8">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#021a1a' }}>
+                  N1
+                </div>
+                <div>
+                  <span className="text-sm font-extrabold text-slate-50 block leading-none">NagrikOne</span>
+                  <span className="text-[9px] font-mono text-cyan-400 uppercase tracking-widest">Citizen Platform</span>
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block">
-                    Password *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setTab('otp_request'); setError(null); }}
-                    className="text-[10.5px] font-mono text-cyan-400 hover:underline"
-                  >
-                    Use SMS OTP
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <KeyRound className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
+              {/* Auth card */}
+              <div className="login-card">
+                {/* Card ambient glow */}
+                <div className="absolute -top-16 -right-16 w-40 h-40 rounded-full pointer-events-none opacity-25"
+                  style={{ background: 'radial-gradient(circle, #06b6d4, transparent 70%)', filter: 'blur(25px)' }} />
 
-              <div className="flex items-center gap-2 text-xs text-slate-400 pt-1 font-sans">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-cyan-500"
-                />
-                <span>Remember me on this browser</span>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Signing In...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to NagrikOne</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* SIGN UP */}
-          {tab === 'signup' && (
-            <form onSubmit={handleSignUp} className="space-y-3.5">
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  Full Name *
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <User className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Jahid Tamboli"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  10-Digit Mobile Number *
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <Phone className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    maxLength={10}
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                    placeholder="e.g. 9503795786"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  Email Address (Optional)
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <Mail className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. citizen@example.com"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  Create Password (Min 6 characters) *
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <Lock className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create your secure password"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-cyan-500"
-                />
-                <span>Remember my details on this device</span>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Registering Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create Account & Continue</span>
-                    <CheckCircle2 className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* OTP REQUEST */}
-          {tab === 'otp_request' && (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div>
-                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                  10-Digit Mobile Number *
-                </label>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                  <Phone className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    maxLength={10}
-                    value={phone || identifier}
-                    onChange={(e) => {
-                      const clean = e.target.value.replace(/\D/g, '');
-                      setPhone(clean);
-                      setIdentifier(clean);
-                    }}
-                    placeholder="e.g. 9503795786"
-                    className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Dispatching Code...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Send 6-Digit SMS Code</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          {/* OTP VERIFY */}
-          {tab === 'otp_verify' && (
-            <form onSubmit={handleVerifyOtp} className="space-y-5">
-              <div>
-                <div className="flex items-center justify-between px-1 mb-2.5 text-[11px] font-mono">
-                  <span className="text-slate-400 uppercase tracking-wider">SMS Code Sent</span>
-                  <span className={expiryCountdown > 30 ? 'text-cyan-400 font-bold' : 'text-rose-400 font-bold'}>
-                    {expiryCountdown > 0
-                      ? `Live: ${Math.floor(expiryCountdown / 60)}:${(expiryCountdown % 60).toString().padStart(2, '0')}`
-                      : 'Code Expired'}
-                  </span>
+                {/* Desktop brand */}
+                <div className="hidden lg:flex items-center gap-3 mb-6">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
+                    style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#021a1a' }}>
+                    N1
+                  </div>
+                  <div>
+                    <span className="text-sm font-extrabold text-slate-50 block leading-none">NagrikOne</span>
+                    <span className="text-[9px] font-mono text-cyan-400 uppercase tracking-widest">Citizen Intelligence Platform</span>
+                  </div>
                 </div>
 
-                <div className="flex justify-center gap-2">
-                  {[0, 1, 2, 3, 4, 5].map((idx) => (
-                    <input
-                      key={idx}
-                      id={`login-otp-${idx}`}
-                      type="text"
-                      maxLength={6}
-                      value={otp[idx]}
-                      onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      className="w-10 h-12 text-center text-lg font-mono font-bold bg-slate-900 border border-slate-700 rounded-xl text-cyan-300 focus:border-cyan-400 focus:outline-none"
-                    />
+                {/* Tab switcher */}
+                <div className="flex p-1 rounded-2xl mb-6"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  {(['signin', 'signup'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => { setTab(t); setError(null); setSuccessMsg(null); }}
+                      className="flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200"
+                      style={tab === t ? {
+                        background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                        color: '#030712',
+                        boxShadow: '0 4px 15px rgba(6,182,212,0.3)'
+                      } : { color: '#94a3b8' }}
+                    >
+                      {t === 'signin' ? 'Sign In' : 'Create Account'}
+                    </button>
                   ))}
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                <span>{cooldown > 0 ? `Resend SMS in ${cooldown}s` : "Didn't receive code?"}</span>
-                {cooldown === 0 && (
-                  <button
-                    type="button"
-                    onClick={handleSendOtp}
-                    className="text-cyan-400 hover:underline"
-                  >
-                    Resend Code
-                  </button>
+                {/* Headings */}
+                <h1 className="text-2xl font-black text-slate-50 tracking-tight mb-1">
+                  {tab === 'signin'
+                    ? (savedUser?.name ? `Welcome back, ${savedUser.name.split(' ')[0]} 👋` : 'Welcome back')
+                    : 'Create your account'}
+                </h1>
+                <p className="text-xs text-slate-400 mb-5 font-sans">
+                  {tab === 'signin'
+                    ? 'Sign in to access your citizen cases and NOVA AI.'
+                    : 'One account for all your civic dispute resolution needs.'}
+                </p>
+
+                {/* Error/success messages */}
+                {error && (
+                  <div className="mb-4 p-3 rounded-xl flex items-center gap-2.5 text-xs text-rose-300 animate-fadeIn"
+                    style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)' }}>
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{error}</span>
+                  </div>
                 )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(6,182,212,0.3)] transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Verifying Code...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Verify & Access Case Intelligence</span>
-                  </>
+                {successMsg && (
+                  <div className="mb-4 p-3 rounded-xl flex items-center gap-2.5 text-xs text-emerald-300 animate-fadeIn"
+                    style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{successMsg}</span>
+                  </div>
                 )}
-              </button>
 
-              <button
-                type="button"
-                onClick={() => setTab('signin')}
-                className="w-full text-center text-xs text-slate-400 hover:text-slate-200 font-mono"
-              >
-                ← Back to Password Sign In
-              </button>
-            </form>
-          )}
+                {/* ─── SIGN IN ─── */}
+                {tab === 'signin' && (
+                  <form onSubmit={handleSignIn} className="space-y-4" noValidate>
+                    <Field label="Email or Mobile Number" required>
+                      <div className="auth-field-wrap">
+                        <Mail className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type="text"
+                          required
+                          autoComplete="username"
+                          value={identifier}
+                          onChange={(e) => setIdentifier(e.target.value)}
+                          placeholder="you@example.com or 9876543210"
+                          className="auth-field-input"
+                        />
+                      </div>
+                    </Field>
 
-          <div className="mt-6 pt-4 border-t border-slate-800/80 text-center text-[10px] text-slate-500 font-mono flex items-center justify-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Server-Side Encrypted Session • Privacy Safeguarded</span>
+                    <Field label="Password" required>
+                      <div className="auth-field-wrap">
+                        <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="current-password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Your password"
+                          className="auth-field-input"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          aria-label={showPassword ? 'Hide password' : 'Show password'}
+                          className="text-slate-500 hover:text-slate-300 transition-colors ml-1"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </Field>
+
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          className="auth-checkbox"
+                        />
+                        <span className="text-xs text-slate-400 font-sans">Remember me</span>
+                      </label>
+                      <span className="text-[10.5px] text-slate-600 font-mono">
+                        Forgot password? Contact support.
+                      </span>
+                    </div>
+
+                    <button type="submit" disabled={loading} className="auth-btn-primary">
+                      {loading
+                        ? <><RefreshCw className="w-4 h-4 animate-spin" /><span>Signing in…</span></>
+                        : <><span>Sign In to NagrikOne</span><ArrowRight className="w-4 h-4" /></>
+                      }
+                    </button>
+
+                    <p className="text-center text-xs text-slate-500 pt-1 font-sans">
+                      Don&apos;t have an account?{' '}
+                      <button type="button" onClick={() => { setTab('signup'); setError(null); }}
+                        className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                        Create one free
+                      </button>
+                    </p>
+                  </form>
+                )}
+
+                {/* ─── SIGN UP ─── */}
+                {tab === 'signup' && (
+                  <form onSubmit={handleSignUp} className="space-y-3.5" noValidate>
+                    <Field label="Full Name" required>
+                      <div className="auth-field-wrap">
+                        <User className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type="text"
+                          required
+                          autoComplete="name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Jahid Tamboli"
+                          className="auth-field-input"
+                        />
+                      </div>
+                    </Field>
+
+                    <Field label="Email Address" required>
+                      <div className="auth-field-wrap">
+                        <Mail className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type="email"
+                          required
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          className="auth-field-input"
+                        />
+                      </div>
+                    </Field>
+
+                    <Field label="Mobile Number" optional>
+                      <div className="auth-field-wrap">
+                        <Phone className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type="tel"
+                          autoComplete="tel"
+                          maxLength={10}
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          placeholder="9876543210"
+                          className="auth-field-input"
+                        />
+                      </div>
+                    </Field>
+
+                    <Field label="Password" required>
+                      <div className="auth-field-wrap">
+                        <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type={showSignupPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="new-password"
+                          value={signupPassword}
+                          onChange={(e) => setSignupPassword(e.target.value)}
+                          placeholder="Min. 8 characters"
+                          className="auth-field-input"
+                        />
+                        <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)}
+                          aria-label={showSignupPassword ? 'Hide' : 'Show'}
+                          className="text-slate-500 hover:text-slate-300 transition-colors ml-1">
+                          {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {pwStrength && (
+                        <div className="mt-1.5 space-y-1">
+                          <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-300 ${pwStrength.color}`} style={{ width: pwStrength.width }} />
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-500">{pwStrength.label}</span>
+                        </div>
+                      )}
+                    </Field>
+
+                    <Field label="Confirm Password" required>
+                      <div className="auth-field-wrap" style={
+                        confirmPassword && signupPassword !== confirmPassword ? { borderColor: 'rgba(244,63,94,0.5)' }
+                        : confirmPassword && signupPassword === confirmPassword ? { borderColor: 'rgba(16,185,129,0.5)' }
+                        : {}
+                      }>
+                        <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="new-password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Repeat your password"
+                          className="auth-field-input"
+                        />
+                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          aria-label={showConfirmPassword ? 'Hide' : 'Show'}
+                          className="text-slate-500 hover:text-slate-300 transition-colors ml-1">
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {confirmPassword && signupPassword !== confirmPassword && (
+                        <span className="text-[10px] text-rose-400 font-mono mt-1 block">Passwords don&apos;t match</span>
+                      )}
+                    </Field>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="auth-checkbox mt-0.5"
+                      />
+                      <span className="text-xs text-slate-400 font-sans leading-relaxed">
+                        I agree to the{' '}
+                        <Link href="/about" className="text-cyan-400 hover:underline">Terms of Service</Link>
+                        {' '}and{' '}
+                        <Link href="/about" className="text-cyan-400 hover:underline">Privacy Policy</Link>
+                      </span>
+                    </label>
+
+                    <button type="submit" disabled={loading} className="auth-btn-primary">
+                      {loading
+                        ? <><RefreshCw className="w-4 h-4 animate-spin" /><span>Creating account…</span></>
+                        : <><span>Create Account</span><CheckCircle2 className="w-4 h-4" /></>
+                      }
+                    </button>
+
+                    <p className="text-center text-xs text-slate-500 pt-1 font-sans">
+                      Already have an account?{' '}
+                      <button type="button" onClick={() => { setTab('signin'); setError(null); }}
+                        className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                        Sign in
+                      </button>
+                    </p>
+                  </form>
+                )}
+
+                {/* Footer */}
+                <div className="mt-6 pt-4 text-center text-[10px] text-slate-600 font-mono flex items-center justify-center gap-1.5"
+                  style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-500/60" />
+                  <span>Encrypted Sessions • No Plain-Text Storage • Privacy First</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -633,7 +611,14 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#030712] flex items-center justify-center text-slate-400">Loading Gateway...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#030712] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-400">
+          <RefreshCw className="w-5 h-5 animate-spin text-cyan-400" />
+          <span className="font-mono text-sm">Loading…</span>
+        </div>
+      </div>
+    }>
       <LoginContent />
     </Suspense>
   );

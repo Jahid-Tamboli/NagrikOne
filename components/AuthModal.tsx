@@ -1,19 +1,20 @@
-﻿'use client';
+'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Mail,
   Phone,
   X,
   CheckCircle2,
   ArrowRight,
-  Sparkles,
   Lock,
   User,
   RefreshCw,
   AlertCircle,
-  KeyRound,
-  ShieldCheck
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 import { AuthSession } from '@/lib/auth/session';
 
@@ -23,6 +24,7 @@ interface AuthModalProps {
   onLoginSuccess: (user: AuthSession) => void;
   initialMessage?: string;
   customPrompt?: string;
+  defaultTab?: 'signin' | 'signup';
 }
 
 export default function AuthModal({
@@ -30,56 +32,66 @@ export default function AuthModal({
   onClose,
   onLoginSuccess,
   initialMessage,
-  customPrompt
+  customPrompt,
+  defaultTab = 'signin'
 }: AuthModalProps) {
-  const [tab, setTab] = useState<'signin' | 'signup' | 'otp_request' | 'otp_verify'>('signin');
-  const [name, setName] = useState('');
+  const [tab, setTab] = useState<'signin' | 'signup'>(defaultTab);
+
+  // Sign In fields
   const [identifier, setIdentifier] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // Sign Up fields
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // Shared state
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(30);
-  const [expiryCountdown, setExpiryCountdown] = useState(180); // 3 minutes live timer
-  const [savedUser, setSavedUser] = useState<{ name?: string; identifier?: string; phone?: string; email?: string } | null>(null);
+  const [savedUser, setSavedUser] = useState<{ name?: string; identifier?: string } | null>(null);
 
-  // Load remembered user on open
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Reset state when modal opens
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
     setSuccessMsg(null);
+    setTab(defaultTab);
     try {
       const saved = localStorage.getItem('nagrikone_saved_citizen');
       if (saved) {
         const parsed = JSON.parse(saved);
         setSavedUser(parsed);
-        if (parsed.identifier || parsed.phone || parsed.email) {
-          setIdentifier(parsed.identifier || parsed.phone || parsed.email || '');
-          setPhone(parsed.phone || '');
-          setEmail(parsed.email || '');
-          if (parsed.name) setName(parsed.name);
-          setTab('signin');
+        if (parsed.identifier || parsed.email) {
+          setIdentifier(parsed.identifier || parsed.email || '');
         }
       }
     } catch (e) {}
-  }, [isOpen]);
+  }, [isOpen, defaultTab]);
 
-  // Live timer for OTP step
+  // Trap focus and close on Escape
   useEffect(() => {
-    let timer: any;
-    if (tab === 'otp_verify') {
-      timer = setInterval(() => {
-        setCooldown((prev) => Math.max(0, prev - 1));
-        setExpiryCountdown((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [tab]);
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -88,71 +100,110 @@ export default function AuthModal({
     try {
       localStorage.setItem('nagrikone_saved_citizen', JSON.stringify({
         name: userData.name,
-        phone: userData.phone,
         email: userData.email,
-        identifier: userData.phone || userData.email,
+        phone: userData.phone,
+        identifier: userData.email || userData.phone,
         savedAt: new Date().toISOString()
       }));
     } catch (e) {}
   };
 
-  // 1. Password Login
-  const handlePasswordLogin = async (e: React.FormEvent) => {
+  // Password strength indicator
+  const getPasswordStrength = (pwd: string) => {
+    if (!pwd) return null;
+    const hasLength = pwd.length >= 8;
+    const hasUpper = /[A-Z]/.test(pwd);
+    const hasLower = /[a-z]/.test(pwd);
+    const hasNum = /\d/.test(pwd);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pwd);
+    const score = [hasLength, hasUpper, hasLower, hasNum, hasSpecial].filter(Boolean).length;
+    if (score <= 2) return { label: 'Weak', color: 'bg-rose-500', width: '33%' };
+    if (score <= 3) return { label: 'Fair', color: 'bg-amber-500', width: '60%' };
+    return { label: 'Strong', color: 'bg-emerald-500', width: '100%' };
+  };
+
+  // Sign In handler
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!identifier.trim() || !password) {
+      setError('Please enter your email/mobile and password.');
+      return;
+    }
     setLoading(true);
-
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: identifier.trim(),
-          password
-        })
+        body: JSON.stringify({ identifier: identifier.trim(), password })
       });
-
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Invalid credentials. Please check your password.');
       }
-
       saveRememberedCitizen(data.user);
       onLoginSuccess(data.user);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your password.');
+      setError(err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Citizen Sign Up
+  // Sign Up handler
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
+    if (!name.trim() || name.trim().length < 2) {
+      setError('Please enter your full name.');
+      return;
+    }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (phone && !/^[6-9]\d{9}$/.test(phone.replace(/\D/g, ''))) {
+      setError('Please enter a valid 10-digit Indian mobile number, or leave it blank.');
+      return;
+    }
+    if (!signupPassword || signupPassword.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+    if (signupPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (!termsAccepted) {
+      setError('Please accept the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim() || undefined,
-          password
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          password: signupPassword,
+          confirmPassword
         })
       });
-
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Registration failed.');
       }
-
       saveRememberedCitizen(data.user);
-      onLoginSuccess(data.user);
-      onClose();
+      setSuccessMsg(`Welcome, ${data.user.name}! Your account is ready.`);
+      setTimeout(() => {
+        onLoginSuccess(data.user);
+        onClose();
+      }, 900);
     } catch (err: any) {
       setError(err.message || 'Could not complete registration.');
     } finally {
@@ -160,498 +211,388 @@ export default function AuthModal({
     }
   };
 
-  // 3. Send SMS OTP
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const target = (phone || identifier).trim();
-
-    if (!target) {
-      setError('Please enter your 10-digit mobile number.');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'send',
-          target
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Unable to send OTP right now.');
-      }
-
-      setTab('otp_verify');
-      setCooldown(data.cooldownSeconds || 30);
-      setExpiryCountdown(data.expirySeconds || 180);
-      setSuccessMsg(`A 6-digit verification code has been dispatched to ${target}.`);
-    } catch (err: any) {
-      setError(err.message || 'Unable to send OTP. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 4. Handle OTP Code Change & Paste
-  const handleOtpChange = (index: number, val: string) => {
-    const digitsOnly = val.replace(/\D/g, '');
-    if (digitsOnly.length > 1) {
-      const newOtp = [...otp];
-      for (let i = 0; i < 6 && i < digitsOnly.length; i++) {
-        newOtp[i] = digitsOnly[i];
-      }
-      setOtp(newOtp);
-      const lastIdx = Math.min(5, digitsOnly.length - 1);
-      document.getElementById(`otp-digit-${lastIdx}`)?.focus();
-      return;
-    }
-
-    if (!/^\d*$/.test(val)) return;
-    const newOtp = [...otp];
-    newOtp[index] = val.slice(-1);
-    setOtp(newOtp);
-
-    if (val && index < 5) {
-      document.getElementById(`otp-digit-${index + 1}`)?.focus();
-    }
-  };
-
-  // 5. Verify OTP
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const code = otp.join('');
-    const target = (phone || identifier).trim();
-
-    if (code.length < 6) {
-      setError('Please enter the full 6-digit verification code.');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'verify',
-          target,
-          code,
-          name: name.trim() || undefined
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid OTP. Please check the code and try again.');
-      }
-
-      saveRememberedCitizen(data.user);
-      onLoginSuccess(data.user);
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Invalid OTP. Please check the code and try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pwStrength = getPasswordStrength(signupPassword);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-gradient-to-b from-[#081322] via-[#040914] to-[#020408] border border-cyan-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_60px_rgba(6,182,212,0.2)] text-slate-100">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(3,7,18,0.88)', backdropFilter: 'blur(20px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Authentication"
+        className="relative w-full max-w-md auth-modal-card animate-auth-enter"
+        style={{
+          background: 'linear-gradient(160deg, #0d1f35 0%, #060d1a 50%, #030712 100%)',
+          border: '1px solid rgba(56,189,248,0.2)',
+          borderRadius: '28px',
+          padding: '32px',
+          boxShadow: '0 0 80px rgba(6,182,212,0.15), 0 40px 80px rgba(0,0,0,0.7)',
+          maxHeight: '90vh',
+          overflowY: 'auto'
+        }}
+      >
+        {/* Ambient orb decorations */}
+        <div className="absolute -top-20 -right-20 w-44 h-44 rounded-full opacity-20 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #06b6d4 0%, transparent 70%)', filter: 'blur(30px)' }} />
+        <div className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full opacity-15 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #a855f7 0%, transparent 70%)', filter: 'blur(25px)' }} />
+
+        {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+          aria-label="Close"
+          className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-100 transition-colors"
+          style={{ background: 'rgba(255,255,255,0.06)' }}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
         {/* Brand Header */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 font-extrabold text-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
+            style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)', color: '#021a1a' }}>
             N1
           </div>
-          <span className="text-xs font-mono font-bold tracking-wider text-cyan-400 uppercase">
-            Citizen Security Gateway
-          </span>
+          <div>
+            <span className="text-sm font-extrabold text-slate-50 block leading-none">NagrikOne</span>
+            <span className="text-[9px] font-mono text-cyan-400 uppercase tracking-widest">Citizen Platform</span>
+          </div>
         </div>
 
-        {/* Tab Selection */}
-        {tab !== 'otp_verify' && (
-          <div className="flex p-1 rounded-2xl bg-slate-900/80 border border-slate-800 mb-5">
-            <button
-              type="button"
-              onClick={() => { setTab('signin'); setError(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                tab === 'signin'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setTab('signup'); setError(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                tab === 'signup'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Create Account
-            </button>
-            <button
-              type="button"
-              onClick={() => { setTab('otp_request'); setError(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                tab === 'otp_request'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-md'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              SMS OTP
-            </button>
+        {/* Custom prompt banner */}
+        {(customPrompt || initialMessage) && (
+          <div className="mb-5 p-3 rounded-xl flex items-start gap-2.5 text-xs text-cyan-200"
+            style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)' }}>
+            <Sparkles className="w-3.5 h-3.5 shrink-0 text-cyan-400 mt-0.5" />
+            <span>{customPrompt || initialMessage}</span>
           </div>
         )}
 
-        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white mb-1">
-          {tab === 'signin' && (savedUser?.name ? `Welcome back, ${savedUser.name.split(' ')[0]}` : 'Citizen Sign In')}
-          {tab === 'signup' && 'Register New Citizen Account'}
-          {tab === 'otp_request' && 'Login with Mobile OTP'}
-          {tab === 'otp_verify' && 'Verify 6-Digit Code'}
-        </h2>
+        {/* Tab Switcher */}
+        <div className="flex p-1 rounded-2xl mb-6"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {(['signin', 'signup'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => { setTab(t); setError(null); setSuccessMsg(null); }}
+              className="flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200"
+              style={tab === t ? {
+                background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                color: '#030712',
+                boxShadow: '0 4px 15px rgba(6,182,212,0.3)'
+              } : {
+                color: '#94a3b8'
+              }}
+            >
+              {t === 'signin' ? 'Sign In' : 'Create Account'}
+            </button>
+          ))}
+        </div>
 
-        <p className="text-xs text-slate-400 mb-5 leading-relaxed font-sans">
-          {customPrompt || initialMessage || (
-            tab === 'signin'
-              ? 'Enter your registered mobile/email and password to access your cases.'
-              : tab === 'signup'
-              ? 'Create your citizen profile once. We remember you securely with one password.'
-              : tab === 'otp_request'
-              ? 'We will send a secure 6-digit code to your phone.'
-              : `Enter the code sent to ${(phone || identifier)}`
-          )}
+        {/* Heading */}
+        <h2 className="text-xl font-black text-slate-50 mb-1 tracking-tight">
+          {tab === 'signin'
+            ? (savedUser?.name ? `Welcome back, ${savedUser.name.split(' ')[0]} 👋` : 'Welcome back')
+            : 'Create your account'}
+        </h2>
+        <p className="text-xs text-slate-400 mb-5 font-sans">
+          {tab === 'signin'
+            ? 'Sign in to access your cases and citizen services.'
+            : 'Join NagrikOne to track and resolve your civic issues.'}
         </p>
 
+        {/* Error */}
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5">
+          <div className="mb-4 p-3 rounded-xl flex items-center gap-2.5 text-xs text-rose-300 animate-fadeIn"
+            style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)' }}>
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
+        {/* Success */}
         {successMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2.5">
+          <div className="mb-4 p-3 rounded-xl flex items-center gap-2.5 text-xs text-emerald-300 animate-fadeIn"
+            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
             <span>{successMsg}</span>
           </div>
         )}
 
-        {/* 1. SIGN IN FORM */}
+        {/* ─── SIGN IN FORM ─── */}
         {tab === 'signin' && (
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
+          <form onSubmit={handleSignIn} className="space-y-4" noValidate>
+            {/* Email/Mobile */}
             <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                Registered Mobile Number or Email *
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Email or Mobile Number
               </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <User className="w-4 h-4 text-slate-400" />
+              <div className="auth-field-wrap">
+                <Mail className="w-4 h-4 text-slate-500 shrink-0" />
                 <input
                   type="text"
                   required
+                  autoComplete="username"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g. 9503795786 or citizen@example.com"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
+                  placeholder="you@example.com or 9876543210"
+                  className="auth-field-input"
                 />
               </div>
             </div>
 
+            {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block">
-                  Password *
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">
+                  Password
                 </label>
+                <span className="text-[10.5px] text-slate-500 font-mono">
+                  Forgot password? Contact support.
+                </span>
+              </div>
+              <div className="auth-field-wrap">
+                <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  className="auth-field-input"
+                />
                 <button
                   type="button"
-                  onClick={() => { setTab('otp_request'); setError(null); }}
-                  className="text-[10.5px] font-mono text-cyan-400 hover:underline"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="text-slate-500 hover:text-slate-300 transition-colors ml-1"
                 >
-                  Forgot / Use SMS OTP
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <KeyRound className="w-4 h-4 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-              <label className="flex items-center gap-2 cursor-pointer font-sans">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-400"
-                />
-                <span>Remember me on this browser</span>
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In to NagrikOne</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* 2. SIGN UP FORM */}
-        {tab === 'signup' && (
-          <form onSubmit={handleSignUp} className="space-y-3.5">
-            <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                Full Name *
-              </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <User className="w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Jahid Tamboli"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                10-Digit Mobile Number *
-              </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <Phone className="w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 9503795786"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                Email Address (Optional)
-              </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <Mail className="w-4 h-4 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. citizen@example.com"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                Create Password (Min 6 characters) *
-              </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <Lock className="w-4 h-4 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Create your secure password"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-400 pt-1">
+            {/* Remember me */}
+            <label className="flex items-center gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-900 text-cyan-500"
+                className="auth-checkbox"
               />
-              <span>Remember my citizen profile on this device</span>
-            </div>
+              <span className="text-xs text-slate-400 font-sans">Remember me on this browser</span>
+            </label>
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
+              className="auth-btn-primary"
             >
               {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Registering Account...</span>
-                </>
+                <><RefreshCw className="w-4 h-4 animate-spin" /><span>Signing in…</span></>
               ) : (
-                <>
-                  <span>Create Account & Continue</span>
-                  <CheckCircle2 className="w-4 h-4" />
-                </>
+                <><span>Sign In</span><ArrowRight className="w-4 h-4" /></>
               )}
             </button>
+
+            {/* Switch to signup */}
+            <p className="text-center text-xs text-slate-500 pt-1 font-sans">
+              Don&apos;t have an account?{' '}
+              <button type="button" onClick={() => { setTab('signup'); setError(null); }}
+                className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                Create one free
+              </button>
+            </p>
           </form>
         )}
 
-        {/* 3. OTP REQUEST FORM */}
-        {tab === 'otp_request' && (
-          <form onSubmit={handleSendOtp} className="space-y-4">
+        {/* ─── SIGN UP FORM ─── */}
+        {tab === 'signup' && (
+          <form onSubmit={handleSignUp} className="space-y-3.5" noValidate>
+            {/* Full Name */}
             <div>
-              <label className="text-[10.5px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
-                Your Mobile Number *
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Full Name <span className="text-rose-400">*</span>
               </label>
-              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 focus-within:border-cyan-400">
-                <Phone className="w-4 h-4 text-slate-400" />
+              <div className="auth-field-wrap">
+                <User className="w-4 h-4 text-slate-500 shrink-0" />
                 <input
                   type="text"
                   required
-                  maxLength={10}
-                  value={phone || identifier}
-                  onChange={(e) => {
-                    const clean = e.target.value.replace(/\D/g, '');
-                    setPhone(clean);
-                    setIdentifier(clean);
-                  }}
-                  placeholder="e.g. 9503795786"
-                  className="w-full bg-transparent border-none outline-none text-xs text-slate-100 placeholder:text-slate-600"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Jahid Tamboli"
+                  className="auth-field-input"
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-[0_4px_25px_rgba(6,182,212,0.35)] transition-all disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>Dispatching Code to Phone...</span>
-                </>
-              ) : (
-                <>
-                  <span>Send 6-Digit SMS Code</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* 4. OTP VERIFY FORM (NO ON-SCREEN CODE DISPLAY!) */}
-        {tab === 'otp_verify' && (
-          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            {/* Email */}
             <div>
-              <div className="flex items-center justify-between px-1 mb-2.5 text-[11px] font-mono">
-                <span className="text-slate-400 uppercase tracking-wider">SMS Code Sent</span>
-                <span className={expiryCountdown > 30 ? 'text-cyan-400 font-bold' : 'text-rose-400 font-bold'}>
-                  {expiryCountdown > 0
-                    ? `Live: ${Math.floor(expiryCountdown / 60)}:${(expiryCountdown % 60).toString().padStart(2, '0')}`
-                    : 'Code Expired'}
-                </span>
-              </div>
-
-              <div className="flex justify-center gap-2">
-                {[0, 1, 2, 3, 4, 5].map((idx) => (
-                  <input
-                    key={idx}
-                    id={`otp-digit-${idx}`}
-                    type="text"
-                    maxLength={6}
-                    value={otp[idx]}
-                    onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    className="w-10 h-12 text-center text-lg font-mono font-bold bg-slate-900 border border-slate-700 rounded-xl text-cyan-300 focus:border-cyan-400 focus:outline-none"
-                  />
-                ))}
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Email Address <span className="text-rose-400">*</span>
+              </label>
+              <div className="auth-field-wrap">
+                <Mail className="w-4 h-4 text-slate-500 shrink-0" />
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="auth-field-input"
+                />
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-              <span>{cooldown > 0 ? `Resend SMS in ${cooldown}s` : "Didn't receive SMS?"}</span>
-              {cooldown === 0 && (
+            {/* Mobile (optional) */}
+            <div>
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Mobile Number <span className="text-slate-600 font-normal">(optional)</span>
+              </label>
+              <div className="auth-field-wrap">
+                <Phone className="w-4 h-4 text-slate-500 shrink-0" />
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  maxLength={10}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="9876543210"
+                  className="auth-field-input"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Password <span className="text-rose-400">*</span>
+              </label>
+              <div className="auth-field-wrap">
+                <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                <input
+                  type={showSignupPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="new-password"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  className="auth-field-input"
+                />
                 <button
                   type="button"
-                  onClick={handleSendOtp}
-                  className="text-cyan-400 hover:underline"
+                  onClick={() => setShowSignupPassword(!showSignupPassword)}
+                  aria-label={showSignupPassword ? 'Hide' : 'Show'}
+                  className="text-slate-500 hover:text-slate-300 transition-colors ml-1"
                 >
-                  Resend SMS
+                  {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
+              </div>
+              {/* Password strength */}
+              {pwStrength && (
+                <div className="mt-1.5 space-y-1">
+                  <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${pwStrength.color}`}
+                      style={{ width: pwStrength.width }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-500">{pwStrength.label}</span>
+                </div>
               )}
             </div>
 
+            {/* Confirm Password */}
+            <div>
+              <label className="text-[11px] font-mono text-slate-400 uppercase tracking-wider block mb-1.5">
+                Confirm Password <span className="text-rose-400">*</span>
+              </label>
+              <div className="auth-field-wrap" style={
+                confirmPassword && signupPassword !== confirmPassword
+                  ? { borderColor: 'rgba(244,63,94,0.5)' }
+                  : confirmPassword && signupPassword === confirmPassword
+                  ? { borderColor: 'rgba(16,185,129,0.5)' }
+                  : {}
+              }>
+                <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat your password"
+                  className="auth-field-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? 'Hide' : 'Show'}
+                  className="text-slate-500 hover:text-slate-300 transition-colors ml-1"
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirmPassword && signupPassword !== confirmPassword && (
+                <span className="text-[10px] text-rose-400 font-mono mt-1 block">Passwords don&apos;t match</span>
+              )}
+            </div>
+
+            {/* Terms */}
+            <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                className="auth-checkbox mt-0.5"
+              />
+              <span className="text-xs text-slate-400 font-sans leading-relaxed">
+                I agree to the{' '}
+                <a href="/about" target="_blank" className="text-cyan-400 hover:underline">Terms of Service</a>
+                {' '}and{' '}
+                <a href="/about" target="_blank" className="text-cyan-400 hover:underline">Privacy Policy</a>
+              </span>
+            </label>
+
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(6,182,212,0.3)] transition-all disabled:opacity-50"
+              className="auth-btn-primary"
             >
               {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying Code...</span>
-                </>
+                <><RefreshCw className="w-4 h-4 animate-spin" /><span>Creating account…</span></>
               ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Verify & Access Case Intelligence</span>
-                </>
+                <><span>Create Account</span><CheckCircle2 className="w-4 h-4" /></>
               )}
             </button>
 
-            <button
-              type="button"
-              onClick={() => setTab('signin')}
-              className="w-full text-center text-xs text-slate-400 hover:text-slate-200 font-mono"
-            >
-              ← Back to Password Sign In
-            </button>
+            {/* Switch to signin */}
+            <p className="text-center text-xs text-slate-500 pt-1 font-sans">
+              Already have an account?{' '}
+              <button type="button" onClick={() => { setTab('signin'); setError(null); }}
+                className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                Sign in
+              </button>
+            </p>
           </form>
         )}
 
-        <div className="mt-6 pt-4 border-t border-slate-800/80 text-center text-[10px] text-slate-500 font-mono flex items-center justify-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Server-Side Encrypted Session • Privacy Safeguarded</span>
+        {/* Footer trust indicator */}
+        <div className="mt-6 pt-4 text-center text-[10px] text-slate-600 font-mono flex items-center justify-center gap-1.5"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <ShieldCheck className="w-3.5 h-3.5 text-cyan-500/60" />
+          <span>PBKDF2-Encrypted • Session-Secured • No Plain-Text Storage</span>
         </div>
       </div>
     </div>

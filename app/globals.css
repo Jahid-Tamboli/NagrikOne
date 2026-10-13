@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -495,3 +495,299 @@ body {
     display: none !important;
   }
 }
+
+/* ============================================================
+   PREMIUM AUTH COMPONENT STYLES
+   ============================================================ */
+
+/* Auth field input wrapper */
+.auth-field-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-field-wrap:focus-within {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08);
+}
+
+/* Auth text input */
+.auth-field-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  color: #f8fafc;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+.auth-field-input::placeholder {
+  color: #475569;
+}
+
+/* Primary auth button */
+.auth-btn-primary {
+  width: 100%;
+  padding: 13px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+  color: #030712;
+  font-weight: 800;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  cursor: pointer;
+}
+
+.auth-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.45);
+  background: linear-gradient(135deg, #22d3ee 0%, #60a5fa 100%);
+}
+
+.auth-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.auth-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Auth checkbox */
+.auth-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.7);
+  accent-color: #06b6d4;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Auth card (login page) */
+.login-card {
+  position: relative;
+  background: linear-gradient(160deg, #0d1f35 0%, #060d1a 50%, #030712 100%);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 28px;
+  padding: 36px;
+  box-shadow:
+    0 0 80px rgba(6, 182, 212, 0.12),
+    0 40px 80px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+/* Auth modal enter animation */
+@keyframes authEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-auth-enter {
+  animation: authEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ============================================================
+   CIVIC NETWORK 3D ANIMATION CLASSES
+   ============================================================ */
+
+/* Orb gradients */
+.civic-orb-primary {
+  background: radial-gradient(circle at center, rgba(6, 182, 212, 0.25) 0%, transparent 70%);
+  filter: blur(40px);
+  animation: orbFloat 8s ease-in-out infinite;
+}
+
+.civic-orb-secondary {
+  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.2) 0%, transparent 70%);
+  filter: blur(30px);
+  animation: orbFloat 6s ease-in-out infinite reverse;
+}
+
+.civic-orb-tertiary {
+  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+  filter: blur(20px);
+  animation: orbFloat 10s ease-in-out infinite;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-20px) scale(1.06); }
+}
+
+/* Ring animations */
+.civic-ring-outer {
+  border: 1.5px solid rgba(6, 182, 212, 0.3);
+  animation: ringRotate 20s linear infinite;
+}
+
+.civic-ring-middle {
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  background: rgba(6, 182, 212, 0.03);
+  animation: ringPulse 4s ease-in-out infinite;
+}
+
+.civic-ring-inner {
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, transparent 70%);
+  animation: orbFloat 3s ease-in-out infinite;
+}
+
+@keyframes ringRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ringPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.97); }
+  50% { opacity: 0.8; transform: scale(1); }
+}
+
+/* Floating node chips */
+.civic-node-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: rgba(8, 19, 34, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.civic-float-1 { animation: chipFloat 5s ease-in-out infinite; }
+.civic-float-2 { animation: chipFloat 7s ease-in-out infinite reverse; }
+.civic-float-3 { animation: chipFloat 6s ease-in-out infinite 1s; }
+.civic-float-4 { animation: chipFloat 8s ease-in-out infinite reverse 0.5s; }
+
+@keyframes chipFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* SVG dash animations */
+.civic-dash-rotate {
+  transform-origin: 100px 100px;
+  animation: dashSpin 25s linear infinite;
+}
+
+.civic-dash-rotate-reverse {
+  transform-origin: 100px 100px;
+  animation: dashSpin 35s linear infinite reverse;
+}
+
+@keyframes dashSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   CARD HOVER & BUTTON EFFECTS
+   ============================================================ */
+
+/* Card hover elevation */
+.card-hover-lift {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+}
+
+.card-hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), 0 0 30px rgba(6, 182, 212, 0.1);
+}
+
+/* Gradient text utility */
+.gradient-text-cyan {
+  background: linear-gradient(135deg, #34d399 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Section entrance animation */
+@keyframes sectionSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-section-enter {
+  animation: sectionSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Soft shimmer effect for loading skeletons */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #0d1f35 25%, #162c45 50%, #0d1f35 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+/* Modal backdrop blur */
+.modal-backdrop {
+  background: rgba(3, 7, 18, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ============================================================
+   REDUCED MOTION OVERRIDES
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .civic-orb-primary,
+  .civic-orb-secondary,
+  .civic-orb-tertiary,
+  .civic-ring-outer,
+  .civic-ring-middle,
+  .civic-ring-inner,
+  .civic-float-1,
+  .civic-float-2,
+  .civic-float-3,
+  .civic-float-4,
+  .civic-dash-rotate,
+  .civic-dash-rotate-reverse {
+    animation: none !important;
+  }
+}
+
